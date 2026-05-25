@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+Ôªøimport { google } from "googleapis";
 
 const ENTREPRISES_SHEET = "Entreprises";
 const STAFF_SHEET = "Staff";
@@ -7,10 +7,11 @@ const PATRONS_SHEET = "Patrons";
 const entrepriseHeaders = [
   "ID",
   "Nom",
-  "Propri√©taire",
+  "Proprietaire",
   "Chiffre_Affaires",
   "Taxes_Dues",
-  "Derniere_Mise_A_Jour"
+  "Derniere_Mise_A_Jour",
+  "Discord_ID"
 ];
 
 const staffHeaders = ["ID", "Username", "Password_Hash", "Role"];
@@ -31,11 +32,11 @@ function getSheetsClient() {
   const privateKey = normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY);
 
   if (!process.env.GOOGLE_SHEET_ID || !email || !privateKey) {
-    throw new Error("Configuration Google Sheets manquante. VÈrifie les variables d'environnement.");
+    throw new Error("Configuration Google Sheets manquante. V√©rifie les variables d'environnement.");
   }
 
   if (!privateKey.includes("-----BEGIN PRIVATE KEY-----") || !privateKey.includes("-----END PRIVATE KEY-----")) {
-    throw new Error("GOOGLE_PRIVATE_KEY est invalide: colle la clÈ privÈe complËte sans GOOGLE_PRIVATE_KEY= et sans guillemets.");
+    throw new Error("GOOGLE_PRIVATE_KEY est invalide: colle la cl√© priv√©e compl√®te sans GOOGLE_PRIVATE_KEY= et sans guillemets.");
   }
 
   const auth = new google.auth.JWT({
@@ -150,7 +151,7 @@ export async function ensureSheetsReady() {
   await Promise.all([
     sheets.spreadsheets.values.update({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: `${ENTREPRISES_SHEET}!A1:F1`,
+      range: `${ENTREPRISES_SHEET}!A1:G1`,
       valueInputOption: "RAW",
       requestBody: { values: [entrepriseHeaders] }
     }),
@@ -174,10 +175,12 @@ export async function listEntreprises() {
   return rows.map((row) => ({
     id: row.ID,
     nom: row.Nom,
-    proprietaire: row.Propri√©taire,
+    proprietaire: row.Proprietaire,
     chiffreAffaires: Number(row.Chiffre_Affaires || 0),
     taxesDues: Number(row.Taxes_Dues || 0),
     derniereMiseAJour: row.Derniere_Mise_A_Jour,
+    discordId: row.Discord_ID || "",
+    discordUrl: row.Discord_ID ? `https://discord.com/users/${row.Discord_ID}` : "",
     rowNumber: row.rowNumber
   }));
 }
@@ -191,7 +194,8 @@ export async function createEntreprise(payload) {
     proprietaire: payload.proprietaire,
     chiffreAffaires: ca,
     taxesDues: Math.round(ca * 0.15 * 100) / 100,
-    derniereMiseAJour: now
+    derniereMiseAJour: now,
+    discordId: String(payload.discordId || "").trim()
   };
 
   await appendRow(ENTREPRISES_SHEET, [
@@ -200,7 +204,8 @@ export async function createEntreprise(payload) {
     entreprise.proprietaire,
     entreprise.chiffreAffaires,
     entreprise.taxesDues,
-    entreprise.derniereMiseAJour
+    entreprise.derniereMiseAJour,
+    entreprise.discordId
   ]);
 
   return entreprise;
@@ -218,7 +223,8 @@ export async function updateEntreprise(id, payload) {
     proprietaire: payload.proprietaire ?? existing.proprietaire,
     chiffreAffaires: ca,
     taxesDues: Math.round(ca * 0.15 * 100) / 100,
-    derniereMiseAJour: new Date().toISOString()
+    derniereMiseAJour: new Date().toISOString(),
+    discordId: payload.discordId !== undefined ? String(payload.discordId || "").trim() : existing.discordId
   };
 
   await updateRow(ENTREPRISES_SHEET, existing.rowNumber, [
@@ -227,7 +233,8 @@ export async function updateEntreprise(id, payload) {
     updated.proprietaire,
     updated.chiffreAffaires,
     updated.taxesDues,
-    updated.derniereMiseAJour
+    updated.derniereMiseAJour,
+    updated.discordId
   ]);
 
   delete updated.rowNumber;

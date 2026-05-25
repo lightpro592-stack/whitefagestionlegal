@@ -23,8 +23,8 @@ Le classeur doit contenir deux onglets :
 
 `Entreprises`
 
-| ID | Nom | Propriétaire | Chiffre_Affaires | Taxes_Dues | Derniere_Mise_A_Jour |
-| --- | --- | --- | --- | --- | --- |
+| ID | Nom | Propri�taire | Chiffre_Affaires | Taxes_Dues | Derniere_Mise_A_Jour | Discord_ID |
+| --- | --- | --- | --- | --- | --- | --- |
 
 `Staff`
 
@@ -37,6 +37,8 @@ Le classeur doit contenir deux onglets :
 | --- | --- | --- | --- | --- |
 
 `Entreprise_ID` contient l'ID de la ligne `Entreprises` liée au compte patron.
+
+Discord_ID permet d'ouvrir le profil du propri�taire via https://discord.com/users/ID.
 
 L'application peut créer ou réinitialiser ces en-têtes via la route admin `POST /api/setup`.
 

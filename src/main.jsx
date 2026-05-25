@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   Building2,
   CircleDollarSign,
+  ExternalLink,
   LogOut,
   Pencil,
   Plus,
@@ -223,8 +224,9 @@ function LoginScreen({ api, onLogin }) {
 
 function EntreprisesView({ api, user, onMessage }) {
   const [entreprises, setEntreprises] = useState([]);
-  const [form, setForm] = useState({ nom: "", proprietaire: "", chiffreAffaires: "" });
+  const [form, setForm] = useState({ nom: "", proprietaire: "", discordId: "", chiffreAffaires: "" });
   const [editing, setEditing] = useState({});
+  const [discordEdits, setDiscordEdits] = useState({});
   const [loading, setLoading] = useState(true);
   const isPatron = user.role === "patron";
   const isReadOnly = user.role === "gouverneur";
@@ -250,18 +252,23 @@ function EntreprisesView({ api, user, onMessage }) {
       body: JSON.stringify(form)
     });
     setEntreprises((items) => [...items, data.entreprise]);
-    setForm({ nom: "", proprietaire: "", chiffreAffaires: "" });
+    setForm({ nom: "", proprietaire: "", discordId: "", chiffreAffaires: "" });
     onMessage("Entreprise créée avec taxes calculées automatiquement.");
   }
 
   async function saveCA(item) {
     const nextCA = editing[item.id] ?? item.chiffreAffaires;
+    const nextDiscordId = discordEdits[item.id] ?? item.discordId ?? "";
+    const payload = isPatron
+      ? { chiffreAffaires: nextCA }
+      : { chiffreAffaires: nextCA, discordId: nextDiscordId };
     const data = await api.request(`/api/entreprises/${item.id}`, {
       method: "PUT",
-      body: JSON.stringify({ chiffreAffaires: nextCA })
+      body: JSON.stringify(payload)
     });
     setEntreprises((items) => items.map((entry) => (entry.id === item.id ? data.entreprise : entry)));
-    onMessage(isPatron ? "Ton chiffre d'affaires a été mis à jour." : "Chiffre d'affaires mis à jour.");
+    setDiscordEdits((current) => ({ ...current, [item.id]: data.entreprise.discordId || "" }));
+    onMessage(isPatron ? "Ton chiffre d\'affaires a �t� mis � jour." : "Chiffre d\'affaires mis � jour.");
   }
 
   async function remove(id) {
@@ -292,9 +299,10 @@ function EntreprisesView({ api, user, onMessage }) {
             <Plus className="h-5 w-5 text-neon" />
             <h2 className="text-lg font-semibold">Créer une entreprise</h2>
           </div>
-          <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px_auto]">
+          <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px_180px_auto]">
             <input className="field" placeholder="Nom" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required />
             <input className="field" placeholder="Propriétaire" value={form.proprietaire} onChange={(e) => setForm({ ...form, proprietaire: e.target.value })} required />
+            <input className="field" placeholder="ID Discord" value={form.discordId} onChange={(e) => setForm({ ...form, discordId: e.target.value })} />
             <input className="field" placeholder="CA de départ" type="number" min="0" step="0.01" value={form.chiffreAffaires} onChange={(e) => setForm({ ...form, chiffreAffaires: e.target.value })} required />
             <button className="primary-button">
               <Plus className="h-5 w-5" />
@@ -306,11 +314,12 @@ function EntreprisesView({ api, user, onMessage }) {
 
       <div className="overflow-hidden rounded-lg border border-line bg-panel/88">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[780px] text-left">
+          <table className="w-full min-w-[980px] text-left">
             <thead className="border-b border-line bg-slate-950/40 text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-3">Nom</th>
                 <th className="px-4 py-3">Propriétaire</th>
+                <th className="px-4 py-3">Discord</th>
                 <th className="px-4 py-3">Chiffre d'affaires</th>
                 <th className="px-4 py-3">Taxes 15%</th>
                 <th className="px-4 py-3">Mise à jour</th>
@@ -318,12 +327,38 @@ function EntreprisesView({ api, user, onMessage }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-line/80">
-              {loading && <TableMessage colSpan={6} text="Chargement..." />}
-              {!loading && entreprises.length === 0 && <TableMessage colSpan={6} text={isPatron ? "Aucune entreprise liée à ton compte." : "Aucune entreprise."} />}
+              {loading && <TableMessage colSpan={7} text="Chargement..." />}
+              {!loading && entreprises.length === 0 && <TableMessage colSpan={7} text={isPatron ? "Aucune entreprise liée à ton compte." : "Aucune entreprise."} />}
               {entreprises.map((item) => (
                 <tr key={item.id} className="hover:bg-white/[0.03]">
                   <td className="px-4 py-3 font-medium text-white">{item.nom}</td>
                   <td className="px-4 py-3 text-slate-300">{item.proprietaire}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex min-w-48 items-center gap-2">
+                      {!isPatron && !isReadOnly ? (
+                        <input
+                          className="field h-10 w-44"
+                          placeholder="ID Discord"
+                          value={discordEdits[item.id] ?? item.discordId ?? ""}
+                          onChange={(e) => setDiscordEdits({ ...discordEdits, [item.id]: e.target.value })}
+                        />
+                      ) : (
+                        <span className="text-slate-300">{item.discordId || "-"}</span>
+                      )}
+                      {item.discordId && (
+                        <a
+                          className="icon-button h-10 w-10 shrink-0"
+                          href={`https://discord.com/users/${item.discordId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Ouvrir le profil Discord"
+                          aria-label="Ouvrir le profil Discord"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <input
                       className="field h-10 w-40"
