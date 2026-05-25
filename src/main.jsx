@@ -10,6 +10,7 @@ import {
   Save,
   Shield,
   Trash2,
+  X,
   UserRound,
   Users
 } from "lucide-react";
@@ -227,9 +228,11 @@ function EntreprisesView({ api, user, onMessage }) {
   const [form, setForm] = useState({ nom: "", proprietaire: "", discordId: "", chiffreAffaires: "" });
   const [editing, setEditing] = useState({});
   const [discordEdits, setDiscordEdits] = useState({});
+  const [editEntreprise, setEditEntreprise] = useState(null);
   const [loading, setLoading] = useState(true);
   const isPatron = user.role === "patron";
   const isReadOnly = user.role === "gouverneur";
+  const canManage = !isPatron && !isReadOnly;
 
   async function load() {
     setLoading(true);
@@ -268,13 +271,36 @@ function EntreprisesView({ api, user, onMessage }) {
     });
     setEntreprises((items) => items.map((entry) => (entry.id === item.id ? data.entreprise : entry)));
     setDiscordEdits((current) => ({ ...current, [item.id]: data.entreprise.discordId || "" }));
-    onMessage(isPatron ? "Ton chiffre d\'affaires a été mis à jour." : "Chiffre d\'affaires mis à jour.");
+    onMessage(isPatron ? "Ton chiffre d\'affaires a ï¿½tï¿½ mis ï¿½ jour." : "Chiffre d\'affaires mis ï¿½ jour.");
   }
 
   async function remove(id) {
     await api.request(`/api/entreprises/${id}`, { method: "DELETE" });
     setEntreprises((items) => items.filter((item) => item.id !== id));
     onMessage("Entreprise supprimÃ©e.");
+  }
+
+
+  function openEditEntreprise(item) {
+    setEditEntreprise({
+      id: item.id,
+      nom: item.nom || "",
+      proprietaire: item.proprietaire || "",
+      discordId: item.discordId || "",
+      chiffreAffaires: item.chiffreAffaires ?? 0
+    });
+  }
+
+  async function saveEntrepriseEdit(event) {
+    event.preventDefault();
+    const data = await api.request(`/api/entreprises/${editEntreprise.id}`, {
+      method: "PUT",
+      body: JSON.stringify(editEntreprise)
+    });
+    setEntreprises((items) => items.map((entry) => (entry.id === editEntreprise.id ? data.entreprise : entry)));
+    setDiscordEdits((current) => ({ ...current, [editEntreprise.id]: data.entreprise.discordId || "" }));
+    setEditEntreprise(null);
+    onMessage("Entreprise modifiee.");
   }
 
   const totals = entreprises.reduce(
@@ -293,7 +319,7 @@ function EntreprisesView({ api, user, onMessage }) {
         <Metric title="Taxes dues" value={currency.format(totals.taxes)} icon={Shield} />
       </div>
 
-      {!isPatron && !isReadOnly && (
+      {canManage && (
         <form onSubmit={create} className="rounded-lg border border-line bg-panel/88 p-4">
           <div className="mb-4 flex items-center gap-2">
             <Plus className="h-5 w-5 text-neon" />
@@ -335,7 +361,7 @@ function EntreprisesView({ api, user, onMessage }) {
                   <td className="px-4 py-3 text-slate-300">{item.proprietaire}</td>
                   <td className="px-4 py-3">
                     <div className="flex min-w-48 items-center gap-2">
-                      {!isPatron && !isReadOnly ? (
+                      {canManage ? (
                         <input
                           className="field h-10 w-44"
                           placeholder="ID Discord"
@@ -374,12 +400,17 @@ function EntreprisesView({ api, user, onMessage }) {
                   <td className="px-4 py-3 text-sm text-slate-400">{formatDate(item.derniereMiseAJour)}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
+                      {canManage && (
+                        <button className="icon-button" onClick={() => openEditEntreprise(item)} title="Editer" aria-label="Editer">
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
                       {!isReadOnly && (
                         <button className="icon-button" onClick={() => saveCA(item)} title="Enregistrer le CA" aria-label="Enregistrer le CA">
                           <Save className="h-4 w-4" />
                         </button>
                       )}
-                      {!isPatron && !isReadOnly && (
+                      {canManage && (
                         <button className="icon-button-danger" onClick={() => remove(item.id)} title="Supprimer" aria-label="Supprimer">
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -392,6 +423,50 @@ function EntreprisesView({ api, user, onMessage }) {
           </table>
         </div>
       </div>
+
+      {editEntreprise && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6">
+          <form onSubmit={saveEntrepriseEdit} className="w-full max-w-2xl rounded-lg border border-line bg-panel p-5 shadow-glow">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Editer l'entreprise</h2>
+                <p className="text-sm text-slate-400">Nom, proprietaire, ID Discord et chiffre d'affaires.</p>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setEditEntreprise(null)} title="Fermer" aria-label="Fermer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="field-label">Nom</span>
+                <input className="field" value={editEntreprise.nom} onChange={(e) => setEditEntreprise({ ...editEntreprise, nom: e.target.value })} required />
+              </label>
+              <label className="block">
+                <span className="field-label">Proprietaire</span>
+                <input className="field" value={editEntreprise.proprietaire} onChange={(e) => setEditEntreprise({ ...editEntreprise, proprietaire: e.target.value })} required />
+              </label>
+              <label className="block">
+                <span className="field-label">ID Discord</span>
+                <input className="field" value={editEntreprise.discordId} onChange={(e) => setEditEntreprise({ ...editEntreprise, discordId: e.target.value })} />
+              </label>
+              <label className="block">
+                <span className="field-label">Chiffre d'affaires</span>
+                <input className="field" type="number" min="0" step="0.01" value={editEntreprise.chiffreAffaires} onChange={(e) => setEditEntreprise({ ...editEntreprise, chiffreAffaires: e.target.value })} required />
+              </label>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="nav-button" type="button" onClick={() => setEditEntreprise(null)}>Annuler</button>
+              <button className="primary-button" type="submit">
+                <Save className="h-5 w-5" />
+                Enregistrer
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
     </section>
   );
 }
