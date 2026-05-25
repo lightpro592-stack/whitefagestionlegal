@@ -370,6 +370,12 @@ app.use((error, _req, res, _next) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`WhiteFA Gestion API lancée sur http://127.0.0.1:${port}`);
-});
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectRun) {
+  app.listen(port, () => {
+    console.log(`WhiteFA Gestion API lancée sur http://127.0.0.1:${port}`);
+  });
+}
+
+export default app;

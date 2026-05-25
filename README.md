@@ -178,3 +178,20 @@ npm start
 ## Alternative Google Apps Script
 
 Ce projet utilise la mÃ©thode recommandÃ©e pour un backend Node.js : Google Sheets API + compte de service. Une Web App Google Apps Script serait possible, mais elle dÃ©placerait la logique CRUD et auth dans Apps Script. Ici, le backend Express garde l'authentification, le calcul des taxes et les permissions au mÃªme endroit.
+## Déploiement Vercel
+
+Le projet contient une fonction serverless `api/index.js` qui expose le backend Express sur `/api/*`.
+
+Dans Vercel, ajoute ces variables dans `Settings > Environment Variables` :
+
+- `JWT_SECRET`
+- `GOOGLE_SHEET_ID`
+- `GOOGLE_SERVICE_ACCOUNT_EMAIL`
+- `GOOGLE_PRIVATE_KEY`
+
+Pour `GOOGLE_PRIVATE_KEY`, colle la clé privée complète avec les `\n`. Après modification des variables, lance un nouveau `Redeploy`.
+
+Vercel doit utiliser :
+
+- Build Command : `npm run build`
+- Output Directory : `dist`
