@@ -16,12 +16,26 @@ const entrepriseHeaders = [
 const staffHeaders = ["ID", "Username", "Password_Hash", "Role"];
 const patronHeaders = ["ID", "Username", "Password_Hash", "Entreprise_ID", "Role"];
 
+function normalizePrivateKey(value) {
+  if (!value) return "";
+
+  return value
+    .trim()
+    .replace(/^['"]|['"]$/g, "")
+    .replace(/\\n/g, "\n")
+    .trim();
+}
+
 function getSheetsClient() {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
+  const privateKey = normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY);
 
   if (!process.env.GOOGLE_SHEET_ID || !email || !privateKey) {
-    throw new Error("Configuration Google Sheets manquante. VÃ©rifie le fichier .env.");
+    throw new Error("Configuration Google Sheets manquante. Vérifie les variables d'environnement.");
+  }
+
+  if (!privateKey.includes("-----BEGIN PRIVATE KEY-----") || !privateKey.includes("-----END PRIVATE KEY-----")) {
+    throw new Error("GOOGLE_PRIVATE_KEY est invalide: colle la clé privée complète sans GOOGLE_PRIVATE_KEY= et sans guillemets.");
   }
 
   const auth = new google.auth.JWT({
