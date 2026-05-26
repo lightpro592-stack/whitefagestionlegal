@@ -227,7 +227,7 @@ function LoginScreen({ api, onLogin }) {
 
 function EntreprisesView({ api, user, onMessage }) {
   const [entreprises, setEntreprises] = useState([]);
-  const [form, setForm] = useState({ nom: "", proprietaire: "", patronId: "", chiffreAffaires: "" });
+  const [form, setForm] = useState({ nom: "", patronId: "", chiffreAffaires: "" });
   const [editing, setEditing] = useState({});
   const [patrons, setPatrons] = useState([]);
   const [patronEdits, setPatronEdits] = useState({});
@@ -268,7 +268,7 @@ function EntreprisesView({ api, user, onMessage }) {
       body: JSON.stringify(form)
     });
     setEntreprises((items) => [...items, data.entreprise]);
-    setForm({ nom: "", proprietaire: "", patronId: patrons[0]?.id || "", chiffreAffaires: "" });
+    setForm({ nom: "", patronId: patrons[0]?.id || "", chiffreAffaires: "" });
     onMessage("Entreprise créée avec taxes calculées automatiquement.");
   }
 
@@ -302,7 +302,6 @@ function EntreprisesView({ api, user, onMessage }) {
     setEditEntreprise({
       id: item.id,
       nom: item.nom || "",
-      proprietaire: item.proprietaire || "",
       patronId: item.patronId || "",
       chiffreAffaires: item.chiffreAffaires ?? 0
     });
@@ -350,9 +349,8 @@ function EntreprisesView({ api, user, onMessage }) {
             <Plus className="h-5 w-5 text-neon" />
             <h2 className="text-lg font-semibold">Créer une entreprise</h2>
           </div>
-          <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px_180px_auto]">
+          <div className="grid gap-3 md:grid-cols-[1fr_220px_180px_auto]">
             <input className="field" placeholder="Nom" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required />
-            <input className="field" placeholder="Propriétaire" value={form.proprietaire} onChange={(e) => setForm({ ...form, proprietaire: e.target.value })} required />
             <select className="field" value={form.patronId} onChange={(e) => setForm({ ...form, patronId: e.target.value })}>
               <option value="">Aucun patron</option>
               {patrons.map((patron) => (
@@ -374,7 +372,6 @@ function EntreprisesView({ api, user, onMessage }) {
             <thead className="border-b border-line bg-slate-950/40 text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-3">Nom</th>
-                <th className="px-4 py-3">Propriétaire</th>
                 <th className="px-4 py-3">Patron</th>
                 <th className="px-4 py-3">Chiffre d'affaires</th>
                 <th className="px-4 py-3">Taxes 15%</th>
@@ -383,12 +380,11 @@ function EntreprisesView({ api, user, onMessage }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-line/80">
-              {loading && <TableMessage colSpan={7} text="Chargement..." />}
-              {!loading && entreprises.length === 0 && <TableMessage colSpan={7} text={isPatron ? "Aucune entreprise liée à ton compte." : "Aucune entreprise."} />}
+              {loading && <TableMessage colSpan={6} text="Chargement..." />}
+              {!loading && entreprises.length === 0 && <TableMessage colSpan={6} text={isPatron ? "Aucune entreprise liée à ton compte." : "Aucune entreprise."} />}
               {entreprises.map((item) => (
                 <tr key={item.id} className="hover:bg-white/[0.03]">
                   <td className="px-4 py-3 font-medium text-white">{item.nom}</td>
-                  <td className="px-4 py-3 text-slate-300">{item.proprietaire}</td>
                   <td className="px-4 py-3">
                     <div className="flex min-w-56 items-center gap-2">
                       {canManage ? (
@@ -464,7 +460,7 @@ function EntreprisesView({ api, user, onMessage }) {
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-white">Editer l'entreprise</h2>
-                <p className="text-sm text-slate-400">Nom, proprietaire, patron et chiffre d'affaires.</p>
+                <p className="text-sm text-slate-400">Nom, patron et chiffre d'affaires.</p>
               </div>
               <button className="icon-button" type="button" onClick={() => setEditEntreprise(null)} title="Fermer" aria-label="Fermer">
                 <X className="h-4 w-4" />
@@ -475,10 +471,6 @@ function EntreprisesView({ api, user, onMessage }) {
               <label className="block">
                 <span className="field-label">Nom</span>
                 <input className="field" value={editEntreprise.nom} onChange={(e) => setEditEntreprise({ ...editEntreprise, nom: e.target.value })} required />
-              </label>
-              <label className="block">
-                <span className="field-label">Proprietaire</span>
-                <input className="field" value={editEntreprise.proprietaire} onChange={(e) => setEditEntreprise({ ...editEntreprise, proprietaire: e.target.value })} required />
               </label>
               <label className="block">
                 <span className="field-label">Patron</span>

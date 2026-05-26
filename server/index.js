@@ -133,7 +133,6 @@ function sanitizePatrons(patrons) {
 
 function validateEntrepriseInput(payload) {
   if (!payload.nom?.trim()) return "Le nom de l'entreprise est obligatoire.";
-  if (!payload.proprietaire?.trim()) return "Le propriétaire est obligatoire.";
   if (Number.isNaN(Number(payload.chiffreAffaires))) return "Le chiffre d'affaires doit être un nombre.";
   return null;
 }
@@ -263,7 +262,7 @@ app.put("/api/entreprises/:id", requireAuth, async (req, res, next) => {
 
     const message = validateEntrepriseInput({
       nom: req.body.nom ?? "ok",
-      proprietaire: req.body.proprietaire ?? "ok",
+      proprietaire: "ok",
       chiffreAffaires: req.body.chiffreAffaires ?? 0
     });
     if (message) return res.status(400).json({ message });

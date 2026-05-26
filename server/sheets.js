@@ -299,7 +299,7 @@ export async function createEntreprise(payload) {
   const entreprise = {
     id: uid("ent"),
     nom: payload.nom,
-    proprietaire: payload.proprietaire,
+    proprietaire: "",
     chiffreAffaires: ca,
     taxesDues: calculateTaxes(ca),
     derniereMiseAJour: now,
@@ -333,7 +333,7 @@ export async function updateEntreprise(id, payload) {
   const updated = {
     ...existing,
     nom: payload.nom ?? existing.nom,
-    proprietaire: payload.proprietaire ?? existing.proprietaire,
+    proprietaire: existing.proprietaire || "",
     chiffreAffaires: ca,
     taxesDues: calculateTaxes(ca),
     derniereMiseAJour: new Date().toISOString(),
