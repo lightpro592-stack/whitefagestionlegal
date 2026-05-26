@@ -137,6 +137,15 @@ function validateEntrepriseInput(payload) {
   return null;
 }
 
+async function validatePatronAssignment(patronId) {
+  if (!patronId) return null;
+  const patrons = await listPatrons();
+  if (!patrons.some((item) => item.id === patronId)) {
+    return "Patron introuvable pour cette entreprise.";
+  }
+  return null;
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "WhiteFA Gestion" });
 });
