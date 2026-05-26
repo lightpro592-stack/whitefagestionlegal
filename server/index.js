@@ -13,6 +13,7 @@ import {
   listEntreprises,
   listPatrons,
   listStaff,
+  recalculateEntrepriseTaxes,
   removeEntreprise,
   removePatron,
   removeStaff,
@@ -193,6 +194,14 @@ app.put("/api/entreprises/:id", requireAuth, async (req, res, next) => {
     const entreprise = await updateEntreprise(req.params.id, req.body);
     if (!entreprise) return res.status(404).json({ message: "Entreprise introuvable." });
     res.json({ entreprise });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/entreprises/recalculate-taxes", requireAuth, requireEnterpriseManager, async (_req, res, next) => {
+  try {
+    res.json(await recalculateEntrepriseTaxes());
   } catch (error) {
     next(error);
   }

@@ -58,6 +58,11 @@ function toObject(headers, values, rowNumber) {
   );
 }
 
+function calculateTaxes(chiffreAffaires) {
+  const ca = Number(chiffreAffaires || 0);
+  return Math.round(ca * 0.15 * 100) / 100;
+}
+
 function uid(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -172,17 +177,20 @@ export async function ensureSheetsReady() {
 
 export async function listEntreprises() {
   const rows = await readSheet(ENTREPRISES_SHEET, entrepriseHeaders);
-  return rows.map((row) => ({
-    id: row.ID,
-    nom: row.Nom,
-    proprietaire: row.Proprietaire,
-    chiffreAffaires: Number(row.Chiffre_Affaires || 0),
-    taxesDues: Number(row.Taxes_Dues || 0),
-    derniereMiseAJour: row.Derniere_Mise_A_Jour,
-    discordId: row.Discord_ID || "",
-    discordUrl: row.Discord_ID ? `https://discord.com/users/${row.Discord_ID}` : "",
-    rowNumber: row.rowNumber
-  }));
+  return rows.map((row) => {
+    const chiffreAffaires = Number(row.Chiffre_Affaires || 0);
+    return {
+      id: row.ID,
+      nom: row.Nom,
+      proprietaire: row.Proprietaire,
+      chiffreAffaires,
+      taxesDues: calculateTaxes(chiffreAffaires),
+      derniereMiseAJour: row.Derniere_Mise_A_Jour,
+      discordId: row.Discord_ID || "",
+      discordUrl: row.Discord_ID ? `https://discord.com/users/${row.Discord_ID}` : "",
+      rowNumber: row.rowNumber
+    };
+  });
 }
 
 export async function createEntreprise(payload) {
@@ -193,7 +201,7 @@ export async function createEntreprise(payload) {
     nom: payload.nom,
     proprietaire: payload.proprietaire,
     chiffreAffaires: ca,
-    taxesDues: Math.round(ca * 0.15 * 100) / 100,
+    taxesDues: calculateTaxes(ca),
     derniereMiseAJour: now,
     discordId: String(payload.discordId || "").trim()
   };
@@ -222,7 +230,7 @@ export async function updateEntreprise(id, payload) {
     nom: payload.nom ?? existing.nom,
     proprietaire: payload.proprietaire ?? existing.proprietaire,
     chiffreAffaires: ca,
-    taxesDues: Math.round(ca * 0.15 * 100) / 100,
+    taxesDues: calculateTaxes(ca),
     derniereMiseAJour: new Date().toISOString(),
     discordId: payload.discordId !== undefined ? String(payload.discordId || "").trim() : existing.discordId
   };
@@ -239,6 +247,32 @@ export async function updateEntreprise(id, payload) {
 
   delete updated.rowNumber;
   return updated;
+}
+
+export async function recalculateEntrepriseTaxes() {
+  const rows = await readSheet(ENTREPRISES_SHEET, entrepriseHeaders);
+  let updatedCount = 0;
+
+  for (const row of rows) {
+    const chiffreAffaires = Number(row.Chiffre_Affaires || 0);
+    const expectedTaxes = calculateTaxes(chiffreAffaires);
+    const currentTaxes = Number(row.Taxes_Dues || 0);
+
+    if (Math.abs(currentTaxes - expectedTaxes) > 0.009) {
+      await updateRow(ENTREPRISES_SHEET, row.rowNumber, [
+        row.ID,
+        row.Nom,
+        row.Proprietaire,
+        chiffreAffaires,
+        expectedTaxes,
+        row.Derniere_Mise_A_Jour,
+        row.Discord_ID || ""
+      ]);
+      updatedCount += 1;
+    }
+  }
+
+  return { updatedCount };
 }
 
 export async function removeEntreprise(id) {
