@@ -4,12 +4,14 @@ import {
   Building2,
   CircleDollarSign,
   ExternalLink,
+  Lock,
   LogOut,
   Pencil,
   Plus,
   Save,
   Shield,
   Trash2,
+  Unlock,
   X,
   UserRound,
   Users
@@ -229,16 +231,19 @@ function EntreprisesView({ api, user, onMessage }) {
   const [editing, setEditing] = useState({});
   const [discordEdits, setDiscordEdits] = useState({});
   const [editEntreprise, setEditEntreprise] = useState(null);
+  const [caLock, setCaLock] = useState({ locked: false, manualLocked: false, automaticLocked: false });
   const [loading, setLoading] = useState(true);
   const isPatron = user.role === "patron";
   const isReadOnly = user.role === "gouverneur";
   const canManage = !isPatron && !isReadOnly;
+  const caLockedForPatron = isPatron && caLock.locked;
 
   async function load() {
     setLoading(true);
     try {
       const data = await api.request("/api/entreprises");
       setEntreprises(data.entreprises);
+      if (data.caLock) setCaLock(data.caLock);
     } finally {
       setLoading(false);
     }
@@ -260,6 +265,10 @@ function EntreprisesView({ api, user, onMessage }) {
   }
 
   async function saveCA(item) {
+    if (caLockedForPatron) {
+      onMessage("La modification du CA est bloquee pour les patrons.");
+      return;
+    }
     const nextCA = editing[item.id] ?? item.chiffreAffaires;
     const nextDiscordId = discordEdits[item.id] ?? item.discordId ?? "";
     const payload = isPatron
@@ -318,6 +327,14 @@ function EntreprisesView({ api, user, onMessage }) {
         <Metric title="CA total" value={currency.format(totals.ca)} icon={CircleDollarSign} />
         <Metric title="Taxes dues" value={currency.format(totals.taxes)} icon={Shield} />
       </div>
+
+      {user.role === "admin" && <CaLockControl api={api} onMessage={onMessage} />}
+
+      {caLockedForPatron && (
+        <div className="rounded-lg border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-amber-100">
+          La modification du CA est bloquee pour le moment.
+        </div>
+      )}
 
       {canManage && (
         <form onSubmit={create} className="rounded-lg border border-line bg-panel/88 p-4">
@@ -393,7 +410,7 @@ function EntreprisesView({ api, user, onMessage }) {
                       step="0.01"
                       value={editing[item.id] ?? item.chiffreAffaires}
                       onChange={(e) => setEditing({ ...editing, [item.id]: e.target.value })}
-                      disabled={isReadOnly}
+                      disabled={isReadOnly || caLockedForPatron}
                     />
                   </td>
                   <td className="px-4 py-3 text-gold">{currency.format(item.taxesDues)}</td>
@@ -406,7 +423,7 @@ function EntreprisesView({ api, user, onMessage }) {
                         </button>
                       )}
                       {!isReadOnly && (
-                        <button className="icon-button" onClick={() => saveCA(item)} title="Enregistrer le CA" aria-label="Enregistrer le CA">
+                        <button className="icon-button" onClick={() => saveCA(item)} disabled={caLockedForPatron} title="Enregistrer le CA" aria-label="Enregistrer le CA">
                           <Save className="h-4 w-4" />
                         </button>
                       )}
@@ -542,6 +559,8 @@ function PatronsView({ api, onMessage }) {
 
   return (
     <section className="space-y-6">
+      <CaLockControl api={api} onMessage={onMessage} />
+
       <form onSubmit={create} className="rounded-lg border border-line bg-panel/88 p-4">
         <div className="mb-4 flex items-center gap-2">
           <UserRound className="h-5 w-5 text-neon" />
@@ -761,6 +780,58 @@ function Metric({ title, value, icon: Icon }) {
         <Icon className="h-5 w-5 text-neon" />
       </div>
       <div className="text-2xl font-bold text-white">{value}</div>
+    </div>
+  );
+}
+
+function CaLockControl({ api, onMessage }) {
+  const [caLock, setCaLock] = useState({ locked: false, manualLocked: false, automaticLocked: false });
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    setLoading(true);
+    try {
+      setCaLock(await api.request("/api/ca-lock"));
+    } catch (err) {
+      onMessage(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function toggleCaLock() {
+    try {
+      const data = await api.request("/api/ca-lock", {
+        method: "PUT",
+        body: JSON.stringify({ locked: !caLock.manualLocked })
+      });
+      setCaLock(data);
+      onMessage(data.manualLocked ? "Modification des CA bloquee pour les patrons." : "Modification des CA debloquee pour les patrons.");
+    } catch (err) {
+      onMessage(err.message);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-panel/88 p-4">
+      <div>
+        <h2 className="text-lg font-semibold text-white">Blocage CA patrons</h2>
+        <p className="text-sm text-slate-400">
+          {caLock.locked
+            ? caLock.automaticLocked
+              ? "Blocage automatique actif jusqu'a lundi 00h."
+              : "Blocage manuel actif."
+            : "Les patrons peuvent modifier leur CA."}
+        </p>
+      </div>
+      <button className={caLock.manualLocked ? "nav-button" : "primary-button"} onClick={toggleCaLock} disabled={loading}>
+        {caLock.manualLocked ? <Unlock className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
+        {caLock.manualLocked ? "Debloquer" : "Bloquer"}
+      </button>
     </div>
   );
 }

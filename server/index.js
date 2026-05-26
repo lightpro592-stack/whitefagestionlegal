@@ -10,6 +10,7 @@ import {
   createPatron,
   createStaff,
   ensureSheetsReady,
+  getCaLockSettings,
   listEntreprises,
   listPatrons,
   listStaff,
@@ -18,6 +19,7 @@ import {
   removePatron,
   removeStaff,
   updateEntreprise,
+  setCaManualLock,
   updatePatron,
   updateStaff
 } from "./sheets.js";
@@ -62,6 +64,52 @@ function requireEnterpriseManager(req, res, next) {
     return res.status(403).json({ message: "Accès réservé au staff." });
   }
   return next();
+}
+
+async function ensureSheetsForAdmin() {
+  if (!process.env.GOOGLE_SHEET_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+    throw new Error("Configuration Google Sheets manquante. Verifie les variables d'environnement.");
+  }
+
+  await ensureSheetsReady();
+}
+
+async function requireAdminSheets(req, res, next) {
+  if (req.user?.role !== "admin") return next();
+
+  try {
+    await ensureSheetsForAdmin();
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function getParisDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Paris",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
+function isAutomaticCaLockActive(date = new Date()) {
+  const parts = getParisDateParts(date);
+  return parts.weekday === "Sun" && Number(parts.hour) >= 19;
+}
+
+async function getCaLockStatus() {
+  const { manualLocked } = await getCaLockSettings();
+  const automaticLocked = isAutomaticCaLockActive();
+  return {
+    locked: manualLocked || automaticLocked,
+    manualLocked,
+    automaticLocked
+  };
 }
 
 function normalizeStaffRole(role) {
@@ -110,6 +158,7 @@ app.post("/api/auth/login", async (req, res, next) => {
 
     if (username === "admin" && password === "whitefagestion") {
       const user = { id: "master-admin", username: "admin", role: "admin" };
+      await ensureSheetsForAdmin();
       return res.json({ token: signToken(user), user });
     }
 
@@ -120,6 +169,7 @@ app.post("/api/auth/login", async (req, res, next) => {
       if (!ok) return res.status(401).json({ message: "Identifiants incorrects." });
 
       const user = { id: account.id, username: account.username, role: account.role || "staff" };
+      if (user.role === "admin") await ensureSheetsForAdmin();
       return res.json({ token: signToken(user), user });
     }
 
@@ -146,15 +196,35 @@ app.get("/api/auth/me", requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
+app.get("/api/ca-lock", requireAuth, requireAdminSheets, async (_req, res, next) => {
+  try {
+    res.json(await getCaLockStatus());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/ca-lock", requireAuth, requireAdmin, requireAdminSheets, async (req, res, next) => {
+  try {
+    const manualLocked = Boolean(req.body.locked);
+    await setCaManualLock(manualLocked);
+    res.json(await getCaLockStatus());
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/entreprises", requireAuth, async (req, res, next) => {
   try {
     const entreprises = await listEntreprises();
+    const caLock = req.user.role === "admin" ? await getCaLockStatus() : { locked: false, manualLocked: false, automaticLocked: false };
     if (req.user.role === "patron") {
       return res.json({
-        entreprises: entreprises.filter((item) => item.id === req.user.entrepriseId)
+        entreprises: entreprises.filter((item) => item.id === req.user.entrepriseId),
+        caLock
       });
     }
-    res.json({ entreprises });
+    res.json({ entreprises, caLock });
   } catch (error) {
     next(error);
   }
@@ -180,6 +250,10 @@ app.put("/api/entreprises/:id", requireAuth, async (req, res, next) => {
     if (req.user.role === "patron") {
       if (req.params.id !== req.user.entrepriseId) {
         return res.status(403).json({ message: "Tu ne peux modifier que ton entreprise." });
+      }
+      const caLock = await getCaLockStatus();
+      if (caLock.locked) {
+        return res.status(403).json({ message: "La modification du CA est bloquee pour les patrons." });
       }
       req.body = { chiffreAffaires: req.body.chiffreAffaires };
     }
@@ -217,7 +291,7 @@ app.delete("/api/entreprises/:id", requireAuth, requireEnterpriseManager, async 
   }
 });
 
-app.get("/api/staff", requireAuth, requireAdmin, async (_req, res, next) => {
+app.get("/api/staff", requireAuth, requireAdmin, requireAdminSheets, async (_req, res, next) => {
   try {
     res.json({ staff: sanitizeStaff(await listStaff()) });
   } catch (error) {
@@ -225,7 +299,7 @@ app.get("/api/staff", requireAuth, requireAdmin, async (_req, res, next) => {
   }
 });
 
-app.get("/api/patrons", requireAuth, requireAdmin, async (_req, res, next) => {
+app.get("/api/patrons", requireAuth, requireAdmin, requireAdminSheets, async (_req, res, next) => {
   try {
     res.json({ patrons: sanitizePatrons(await listPatrons()) });
   } catch (error) {
@@ -384,6 +458,9 @@ const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURL
 if (isDirectRun) {
   app.listen(port, () => {
     console.log(`WhiteFA Gestion API lancée sur http://127.0.0.1:${port}`);
+    ensureSheetsReady().catch((error) => {
+      console.error("Initialisation Google Sheets impossible:", error.message);
+    });
   });
 }
 

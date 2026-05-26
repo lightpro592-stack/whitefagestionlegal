@@ -3,6 +3,7 @@
 const ENTREPRISES_SHEET = "Entreprises";
 const STAFF_SHEET = "Staff";
 const PATRONS_SHEET = "Patrons";
+const SETTINGS_SHEET = "Settings";
 
 const entrepriseHeaders = [
   "ID",
@@ -16,6 +17,8 @@ const entrepriseHeaders = [
 
 const staffHeaders = ["ID", "Username", "Password_Hash", "Role"];
 const patronHeaders = ["ID", "Username", "Password_Hash", "Entreprise_ID", "Role"];
+const settingsHeaders = ["Key", "Value"];
+const CA_MANUAL_LOCK_KEY = "ca_manual_lock";
 
 function normalizePrivateKey(value) {
   if (!value) return "";
@@ -145,6 +148,9 @@ export async function ensureSheetsReady() {
   if (!titles.includes(PATRONS_SHEET)) {
     requests.push({ addSheet: { properties: { title: PATRONS_SHEET } } });
   }
+  if (!titles.includes(SETTINGS_SHEET)) {
+    requests.push({ addSheet: { properties: { title: SETTINGS_SHEET } } });
+  }
 
   if (requests.length > 0) {
     await sheets.spreadsheets.batchUpdate({
@@ -171,8 +177,36 @@ export async function ensureSheetsReady() {
       range: `${PATRONS_SHEET}!A1:E1`,
       valueInputOption: "RAW",
       requestBody: { values: [patronHeaders] }
+    }),
+    sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `${SETTINGS_SHEET}!A1:B1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [settingsHeaders] }
     })
   ]);
+}
+
+export async function getCaLockSettings() {
+  await ensureSheetsReady();
+  const rows = await readSheet(SETTINGS_SHEET, settingsHeaders);
+  const setting = rows.find((row) => row.Key === CA_MANUAL_LOCK_KEY);
+  return { manualLocked: setting?.Value === "true" };
+}
+
+export async function setCaManualLock(manualLocked) {
+  await ensureSheetsReady();
+  const rows = await readSheet(SETTINGS_SHEET, settingsHeaders);
+  const existing = rows.find((row) => row.Key === CA_MANUAL_LOCK_KEY);
+  const value = manualLocked ? "true" : "false";
+
+  if (existing) {
+    await updateRow(SETTINGS_SHEET, existing.rowNumber, [CA_MANUAL_LOCK_KEY, value]);
+  } else {
+    await appendRow(SETTINGS_SHEET, [CA_MANUAL_LOCK_KEY, value]);
+  }
+
+  return { manualLocked };
 }
 
 export async function listEntreprises() {
