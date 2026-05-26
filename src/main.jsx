@@ -227,9 +227,10 @@ function LoginScreen({ api, onLogin }) {
 
 function EntreprisesView({ api, user, onMessage }) {
   const [entreprises, setEntreprises] = useState([]);
-  const [form, setForm] = useState({ nom: "", proprietaire: "", discordId: "", chiffreAffaires: "" });
+  const [form, setForm] = useState({ nom: "", proprietaire: "", patronId: "", chiffreAffaires: "" });
   const [editing, setEditing] = useState({});
-  const [discordEdits, setDiscordEdits] = useState({});
+  const [patrons, setPatrons] = useState([]);
+  const [patronEdits, setPatronEdits] = useState({});
   const [editEntreprise, setEditEntreprise] = useState(null);
   const [caLock, setCaLock] = useState({ locked: false, manualLocked: false, automaticLocked: false });
   const [loading, setLoading] = useState(true);
@@ -244,6 +245,13 @@ function EntreprisesView({ api, user, onMessage }) {
       const data = await api.request("/api/entreprises");
       setEntreprises(data.entreprises);
       if (data.caLock) setCaLock(data.caLock);
+      if (canManage) {
+        const patronsData = await api.request("/api/patrons-options");
+        setPatrons(patronsData.patrons);
+        if (!form.patronId && patronsData.patrons[0]) {
+          setForm((current) => ({ ...current, patronId: patronsData.patrons[0].id }));
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -260,7 +268,7 @@ function EntreprisesView({ api, user, onMessage }) {
       body: JSON.stringify(form)
     });
     setEntreprises((items) => [...items, data.entreprise]);
-    setForm({ nom: "", proprietaire: "", discordId: "", chiffreAffaires: "" });
+    setForm({ nom: "", proprietaire: "", patronId: patrons[0]?.id || "", chiffreAffaires: "" });
     onMessage("Entreprise créée avec taxes calculées automatiquement.");
   }
 
@@ -270,16 +278,16 @@ function EntreprisesView({ api, user, onMessage }) {
       return;
     }
     const nextCA = editing[item.id] ?? item.chiffreAffaires;
-    const nextDiscordId = discordEdits[item.id] ?? item.discordId ?? "";
+    const nextPatronId = patronEdits[item.id] ?? item.patronId ?? "";
     const payload = isPatron
       ? { chiffreAffaires: nextCA }
-      : { chiffreAffaires: nextCA, discordId: nextDiscordId };
+      : { chiffreAffaires: nextCA, patronId: nextPatronId };
     const data = await api.request(`/api/entreprises/${item.id}`, {
       method: "PUT",
       body: JSON.stringify(payload)
     });
     setEntreprises((items) => items.map((entry) => (entry.id === item.id ? data.entreprise : entry)));
-    setDiscordEdits((current) => ({ ...current, [item.id]: data.entreprise.discordId || "" }));
+    setPatronEdits((current) => ({ ...current, [item.id]: data.entreprise.patronId || "" }));
     onMessage(isPatron ? "Ton chiffre d\'affaires a �t� mis � jour." : "Chiffre d\'affaires mis � jour.");
   }
 
@@ -295,7 +303,7 @@ function EntreprisesView({ api, user, onMessage }) {
       id: item.id,
       nom: item.nom || "",
       proprietaire: item.proprietaire || "",
-      discordId: item.discordId || "",
+      patronId: item.patronId || "",
       chiffreAffaires: item.chiffreAffaires ?? 0
     });
   }
@@ -307,7 +315,7 @@ function EntreprisesView({ api, user, onMessage }) {
       body: JSON.stringify(editEntreprise)
     });
     setEntreprises((items) => items.map((entry) => (entry.id === editEntreprise.id ? data.entreprise : entry)));
-    setDiscordEdits((current) => ({ ...current, [editEntreprise.id]: data.entreprise.discordId || "" }));
+    setPatronEdits((current) => ({ ...current, [editEntreprise.id]: data.entreprise.patronId || "" }));
     setEditEntreprise(null);
     onMessage("Entreprise modifiee.");
   }
@@ -345,7 +353,12 @@ function EntreprisesView({ api, user, onMessage }) {
           <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px_180px_auto]">
             <input className="field" placeholder="Nom" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required />
             <input className="field" placeholder="Propriétaire" value={form.proprietaire} onChange={(e) => setForm({ ...form, proprietaire: e.target.value })} required />
-            <input className="field" placeholder="ID Discord" value={form.discordId} onChange={(e) => setForm({ ...form, discordId: e.target.value })} />
+            <select className="field" value={form.patronId} onChange={(e) => setForm({ ...form, patronId: e.target.value })}>
+              <option value="">Aucun patron</option>
+              {patrons.map((patron) => (
+                <option key={patron.id} value={patron.id}>{patron.username}</option>
+              ))}
+            </select>
             <input className="field" placeholder="CA de départ" type="number" min="0" step="0.01" value={form.chiffreAffaires} onChange={(e) => setForm({ ...form, chiffreAffaires: e.target.value })} required />
             <button className="primary-button">
               <Plus className="h-5 w-5" />
@@ -362,7 +375,7 @@ function EntreprisesView({ api, user, onMessage }) {
               <tr>
                 <th className="px-4 py-3">Nom</th>
                 <th className="px-4 py-3">Propriétaire</th>
-                <th className="px-4 py-3">Discord</th>
+                <th className="px-4 py-3">Patron</th>
                 <th className="px-4 py-3">Chiffre d'affaires</th>
                 <th className="px-4 py-3">Taxes 15%</th>
                 <th className="px-4 py-3">Mise à jour</th>
@@ -377,21 +390,25 @@ function EntreprisesView({ api, user, onMessage }) {
                   <td className="px-4 py-3 font-medium text-white">{item.nom}</td>
                   <td className="px-4 py-3 text-slate-300">{item.proprietaire}</td>
                   <td className="px-4 py-3">
-                    <div className="flex min-w-48 items-center gap-2">
+                    <div className="flex min-w-56 items-center gap-2">
                       {canManage ? (
-                        <input
-                          className="field h-10 w-44"
-                          placeholder="ID Discord"
-                          value={discordEdits[item.id] ?? item.discordId ?? ""}
-                          onChange={(e) => setDiscordEdits({ ...discordEdits, [item.id]: e.target.value })}
-                        />
+                        <select
+                          className="field h-10 w-48"
+                          value={patronEdits[item.id] ?? item.patronId ?? ""}
+                          onChange={(e) => setPatronEdits({ ...patronEdits, [item.id]: e.target.value })}
+                        >
+                          <option value="">Aucun patron</option>
+                          {patrons.map((patron) => (
+                            <option key={patron.id} value={patron.id}>{patron.username}</option>
+                          ))}
+                        </select>
                       ) : (
-                        <span className="text-slate-300">{item.discordId || "-"}</span>
+                        <span className="text-slate-300">{item.patronUsername || "-"}</span>
                       )}
-                      {item.discordId && (
+                      {item.patronDiscordId && (
                         <a
                           className="icon-button h-10 w-10 shrink-0"
-                          href={`https://discord.com/users/${item.discordId}`}
+                          href={`https://discord.com/users/${item.patronDiscordId}`}
                           target="_blank"
                           rel="noreferrer"
                           title="Ouvrir le profil Discord"
@@ -447,7 +464,7 @@ function EntreprisesView({ api, user, onMessage }) {
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-white">Editer l'entreprise</h2>
-                <p className="text-sm text-slate-400">Nom, proprietaire, ID Discord et chiffre d'affaires.</p>
+                <p className="text-sm text-slate-400">Nom, proprietaire, patron et chiffre d'affaires.</p>
               </div>
               <button className="icon-button" type="button" onClick={() => setEditEntreprise(null)} title="Fermer" aria-label="Fermer">
                 <X className="h-4 w-4" />
@@ -464,8 +481,13 @@ function EntreprisesView({ api, user, onMessage }) {
                 <input className="field" value={editEntreprise.proprietaire} onChange={(e) => setEditEntreprise({ ...editEntreprise, proprietaire: e.target.value })} required />
               </label>
               <label className="block">
-                <span className="field-label">ID Discord</span>
-                <input className="field" value={editEntreprise.discordId} onChange={(e) => setEditEntreprise({ ...editEntreprise, discordId: e.target.value })} />
+                <span className="field-label">Patron</span>
+                <select className="field" value={editEntreprise.patronId} onChange={(e) => setEditEntreprise({ ...editEntreprise, patronId: e.target.value })}>
+                  <option value="">Aucun patron</option>
+                  {patrons.map((patron) => (
+                    <option key={patron.id} value={patron.id}>{patron.username}</option>
+                  ))}
+                </select>
               </label>
               <label className="block">
                 <span className="field-label">Chiffre d'affaires</span>
@@ -490,20 +512,12 @@ function EntreprisesView({ api, user, onMessage }) {
 
 function PatronsView({ api, onMessage }) {
   const [patrons, setPatrons] = useState([]);
-  const [entreprises, setEntreprises] = useState([]);
-  const [form, setForm] = useState({ username: "", password: "", entrepriseId: "" });
+  const [form, setForm] = useState({ username: "", password: "", discordId: "" });
   const [edits, setEdits] = useState({});
 
   async function load() {
-    const [patronsData, entreprisesData] = await Promise.all([
-      api.request("/api/patrons"),
-      api.request("/api/entreprises")
-    ]);
-    setPatrons(patronsData.patrons);
-    setEntreprises(entreprisesData.entreprises);
-    if (!form.entrepriseId && entreprisesData.entreprises[0]) {
-      setForm((current) => ({ ...current, entrepriseId: entreprisesData.entreprises[0].id }));
-    }
+    const data = await api.request("/api/patrons");
+    setPatrons(data.patrons);
   }
 
   useEffect(() => {
@@ -517,10 +531,9 @@ function PatronsView({ api, onMessage }) {
         method: "POST",
         body: JSON.stringify(form)
       });
-      const entreprise = entreprises.find((item) => item.id === data.account.entrepriseId);
-      setPatrons((items) => [...items, { ...data.account, entrepriseNom: entreprise?.nom || "" }]);
-      setForm({ username: "", password: "", entrepriseId: entreprises[0]?.id || "" });
-      onMessage("Compte patron créé et lié à son entreprise.");
+      setPatrons((items) => [...items, data.account]);
+      setForm({ username: "", password: "", discordId: "" });
+      onMessage("Compte patron cree.");
     } catch (err) {
       onMessage(err.message);
     }
@@ -533,15 +546,9 @@ function PatronsView({ api, onMessage }) {
         method: "PUT",
         body: JSON.stringify(payload)
       });
-      const entrepriseId = data.account.entrepriseId;
-      const entreprise = entreprises.find((entry) => entry.id === entrepriseId);
-      setPatrons((items) =>
-        items.map((entry) =>
-          entry.id === item.id ? { ...data.account, entrepriseNom: entreprise?.nom || "" } : entry
-        )
-      );
+      setPatrons((items) => items.map((entry) => (entry.id === item.id ? data.account : entry)));
       setEdits((current) => ({ ...current, [item.id]: {} }));
-      onMessage("Compte patron modifié.");
+      onMessage("Compte patron modifie.");
     } catch (err) {
       onMessage(err.message);
     }
@@ -551,7 +558,7 @@ function PatronsView({ api, onMessage }) {
     try {
       await api.request(`/api/patrons/${id}`, { method: "DELETE" });
       setPatrons((items) => items.filter((item) => item.id !== id));
-      onMessage("Compte patron supprimé.");
+      onMessage("Compte patron supprime.");
     } catch (err) {
       onMessage(err.message);
     }
@@ -569,13 +576,8 @@ function PatronsView({ api, onMessage }) {
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
           <input className="field" placeholder="Username patron" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required />
           <input className="field" placeholder="Mot de passe" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
-          <select className="field" value={form.entrepriseId} onChange={(e) => setForm({ ...form, entrepriseId: e.target.value })} required>
-            <option value="" disabled>Entreprise liée</option>
-            {entreprises.map((item) => (
-              <option key={item.id} value={item.id}>{item.nom}</option>
-            ))}
-          </select>
-          <button className="primary-button" disabled={entreprises.length === 0}>
+          <input className="field" placeholder="ID Discord" value={form.discordId} onChange={(e) => setForm({ ...form, discordId: e.target.value })} />
+          <button className="primary-button">
             <Plus className="h-5 w-5" />
             Ajouter
           </button>
@@ -589,8 +591,8 @@ function PatronsView({ api, onMessage }) {
               <tr>
                 <th className="px-4 py-3">Username</th>
                 <th className="px-4 py-3">Nouveau mot de passe</th>
-                <th className="px-4 py-3">Entreprise liée</th>
-                <th className="px-4 py-3">Rôle</th>
+                <th className="px-4 py-3">ID Discord</th>
+                <th className="px-4 py-3">Role</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -615,15 +617,26 @@ function PatronsView({ api, onMessage }) {
                     />
                   </td>
                   <td className="px-4 py-3">
-                    <select
-                      className="field h-10"
-                      value={edits[item.id]?.entrepriseId ?? item.entrepriseId}
-                      onChange={(e) => setEdits({ ...edits, [item.id]: { ...(edits[item.id] || {}), entrepriseId: e.target.value } })}
-                    >
-                      {entreprises.map((entry) => (
-                        <option key={entry.id} value={entry.id}>{entry.nom}</option>
-                      ))}
-                    </select>
+                    <div className="flex min-w-48 items-center gap-2">
+                      <input
+                        className="field h-10 w-44"
+                        placeholder="ID Discord"
+                        value={edits[item.id]?.discordId ?? item.discordId ?? ""}
+                        onChange={(e) => setEdits({ ...edits, [item.id]: { ...(edits[item.id] || {}), discordId: e.target.value } })}
+                      />
+                      {(edits[item.id]?.discordId ?? item.discordId) && (
+                        <a
+                          className="icon-button h-10 w-10 shrink-0"
+                          href={`https://discord.com/users/${edits[item.id]?.discordId ?? item.discordId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Ouvrir le profil Discord"
+                          aria-label="Ouvrir le profil Discord"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-neon">{item.role}</td>
                   <td className="px-4 py-3">

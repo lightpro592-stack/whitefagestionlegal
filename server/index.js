@@ -122,11 +122,11 @@ function sanitizeStaff(staff) {
 }
 
 function sanitizePatrons(patrons) {
-  return patrons.map(({ id, username, entrepriseId, entrepriseNom, role }) => ({
+  return patrons.map(({ id, username, discordId, discordUrl, role }) => ({
     id,
     username,
-    entrepriseId,
-    entrepriseNom,
+    discordId,
+    discordUrl,
     role
   }));
 }
@@ -183,8 +183,7 @@ app.post("/api/auth/login", async (req, res, next) => {
     const user = {
       id: patron.id,
       username: patron.username,
-      role: "patron",
-      entrepriseId: patron.entrepriseId
+      role: "patron"
     };
     return res.json({ token: signToken(user), user });
   } catch (error) {
@@ -220,7 +219,7 @@ app.get("/api/entreprises", requireAuth, async (req, res, next) => {
     const caLock = await getCaLockStatus();
     if (req.user.role === "patron") {
       return res.json({
-        entreprises: entreprises.filter((item) => item.id === req.user.entrepriseId),
+        entreprises: entreprises.filter((item) => item.patronId === req.user.id),
         caLock
       });
     }
@@ -234,6 +233,8 @@ app.post("/api/entreprises", requireAuth, requireEnterpriseManager, async (req, 
   try {
     const message = validateEntrepriseInput(req.body);
     if (message) return res.status(400).json({ message });
+    const patronMessage = await validatePatronAssignment(String(req.body.patronId || "").trim());
+    if (patronMessage) return res.status(400).json({ message: patronMessage });
     const entreprise = await createEntreprise(req.body);
     res.status(201).json({ entreprise });
   } catch (error) {
@@ -248,7 +249,9 @@ app.put("/api/entreprises/:id", requireAuth, async (req, res, next) => {
     }
 
     if (req.user.role === "patron") {
-      if (req.params.id !== req.user.entrepriseId) {
+      const entreprises = await listEntreprises();
+      const entreprise = entreprises.find((item) => item.id === req.params.id);
+      if (!entreprise || entreprise.patronId !== req.user.id) {
         return res.status(403).json({ message: "Tu ne peux modifier que ton entreprise." });
       }
       const caLock = await getCaLockStatus();
@@ -264,6 +267,10 @@ app.put("/api/entreprises/:id", requireAuth, async (req, res, next) => {
       chiffreAffaires: req.body.chiffreAffaires ?? 0
     });
     if (message) return res.status(400).json({ message });
+    if (req.body.patronId !== undefined) {
+      const patronMessage = await validatePatronAssignment(String(req.body.patronId || "").trim());
+      if (patronMessage) return res.status(400).json({ message: patronMessage });
+    }
 
     const entreprise = await updateEntreprise(req.params.id, req.body);
     if (!entreprise) return res.status(404).json({ message: "Entreprise introuvable." });
@@ -307,23 +314,27 @@ app.get("/api/patrons", requireAuth, requireAdmin, requireAdminSheets, async (_r
   }
 });
 
+app.get("/api/patrons-options", requireAuth, requireEnterpriseManager, async (_req, res, next) => {
+  try {
+    res.json({ patrons: sanitizePatrons(await listPatrons()) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/patrons", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const username = String(req.body.username || "").trim();
     const password = String(req.body.password || "");
-    const entrepriseId = String(req.body.entrepriseId || "").trim();
+    const discordId = String(req.body.discordId || "").trim();
 
-    if (!username || !password || !entrepriseId) {
-      return res.status(400).json({ message: "Username, mot de passe et entreprise sont obligatoires." });
+    if (!username || !password) {
+      return res.status(400).json({ message: "Username et mot de passe sont obligatoires." });
     }
     if (username.toLowerCase() === "admin") {
       return res.status(400).json({ message: "Le username admin est réservé au compte maître." });
     }
 
-    const entreprises = await listEntreprises();
-    if (!entreprises.some((item) => item.id === entrepriseId)) {
-      return res.status(400).json({ message: "Entreprise introuvable pour ce patron." });
-    }
 
     const [staff, patrons] = await Promise.all([listStaff(), listPatrons()]);
     const exists =
@@ -332,7 +343,7 @@ app.post("/api/patrons", requireAuth, requireAdmin, async (req, res, next) => {
     if (exists) return res.status(409).json({ message: "Ce username existe déjà." });
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const account = await createPatron({ username, passwordHash, entrepriseId });
+    const account = await createPatron({ username, passwordHash, discordId });
     res.status(201).json({ account });
   } catch (error) {
     next(error);
@@ -344,7 +355,7 @@ app.put("/api/patrons/:id", requireAuth, requireAdmin, async (req, res, next) =>
     const payload = {};
     if (req.body.username) payload.username = String(req.body.username).trim();
     if (req.body.password) payload.passwordHash = await bcrypt.hash(String(req.body.password), 12);
-    if (req.body.entrepriseId) payload.entrepriseId = String(req.body.entrepriseId).trim();
+    if (req.body.discordId !== undefined) payload.discordId = String(req.body.discordId).trim();
 
     if (payload.username?.toLowerCase() === "admin") {
       return res.status(400).json({ message: "Le username admin est réservé au compte maître." });
@@ -359,12 +370,6 @@ app.put("/api/patrons/:id", requireAuth, requireAdmin, async (req, res, next) =>
       if (exists) return res.status(409).json({ message: "Ce username existe déjà." });
     }
 
-    if (payload.entrepriseId) {
-      const entreprises = await listEntreprises();
-      if (!entreprises.some((item) => item.id === payload.entrepriseId)) {
-        return res.status(400).json({ message: "Entreprise introuvable pour ce patron." });
-      }
-    }
 
     const account = await updatePatron(req.params.id, payload);
     if (!account) return res.status(404).json({ message: "Compte patron introuvable." });

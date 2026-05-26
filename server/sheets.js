@@ -12,11 +12,11 @@ const entrepriseHeaders = [
   "Chiffre_Affaires",
   "Taxes_Dues",
   "Derniere_Mise_A_Jour",
-  "Discord_ID"
+  "Patron_ID"
 ];
 
 const staffHeaders = ["ID", "Username", "Password_Hash", "Role"];
-const patronHeaders = ["ID", "Username", "Password_Hash", "Entreprise_ID", "Role"];
+const patronHeaders = ["ID", "Username", "Password_Hash", "Discord_ID", "Role"];
 const settingsHeaders = ["Key", "Value"];
 const CA_MANUAL_LOCK_KEY = "ca_manual_lock";
 
@@ -131,6 +131,63 @@ async function deleteRow(sheetName, rowNumber) {
   });
 }
 
+async function migrateLegacyPatronAssignments(sheets) {
+  const [entreprisesResponse, patronsResponse] = await Promise.all([
+    sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `${ENTREPRISES_SHEET}!A:G`
+    }),
+    sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `${PATRONS_SHEET}!A:E`
+    })
+  ]);
+
+  const entreprisesRows = entreprisesResponse.data.values ?? [];
+  const patronsRows = patronsResponse.data.values ?? [];
+  if (entreprisesRows.length < 2 || patronsRows.length < 2) return;
+
+  let changedEntreprises = false;
+  let changedPatrons = false;
+  const entreprisesById = new Map(entreprisesRows.slice(1).map((row) => [row[0], row]));
+
+  for (const patronRow of patronsRows.slice(1)) {
+    const patronId = patronRow[0];
+    const legacyEntrepriseId = patronRow[3] || "";
+    if (!patronId || !legacyEntrepriseId.startsWith("ent_")) continue;
+
+    const entrepriseRow = entreprisesById.get(legacyEntrepriseId);
+    if (!entrepriseRow) continue;
+
+    const legacyDiscordId = entrepriseRow[6] || "";
+    if (!legacyDiscordId.startsWith("patron_")) {
+      patronRow[3] = legacyDiscordId;
+      changedPatrons = true;
+    }
+
+    entrepriseRow[6] = patronId;
+    changedEntreprises = true;
+  }
+
+  if (changedEntreprises) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `${ENTREPRISES_SHEET}!A1:G${entreprisesRows.length}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: entreprisesRows }
+    });
+  }
+
+  if (changedPatrons) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `${PATRONS_SHEET}!A1:E${patronsRows.length}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: patronsRows }
+    });
+  }
+}
+
 export async function ensureSheetsReady() {
   const sheets = getSheetsClient();
   const spreadsheet = await sheets.spreadsheets.get({
@@ -158,6 +215,8 @@ export async function ensureSheetsReady() {
       requestBody: { requests }
     });
   }
+
+  await migrateLegacyPatronAssignments(sheets);
 
   await Promise.all([
     sheets.spreadsheets.values.update({
@@ -212,8 +271,10 @@ export async function setCaManualLock(manualLocked) {
 
 export async function listEntreprises() {
   const rows = await readSheet(ENTREPRISES_SHEET, entrepriseHeaders);
+  const patrons = await listPatronAccounts();
   return rows.map((row) => {
     const chiffreAffaires = Number(row.Chiffre_Affaires || 0);
+    const patron = patrons.find((item) => item.id === row.Patron_ID);
     return {
       id: row.ID,
       nom: row.Nom,
@@ -221,8 +282,9 @@ export async function listEntreprises() {
       chiffreAffaires,
       taxesDues: calculateTaxes(chiffreAffaires),
       derniereMiseAJour: row.Derniere_Mise_A_Jour,
-      discordId: row.Discord_ID || "",
-      discordUrl: row.Discord_ID ? `https://discord.com/users/${row.Discord_ID}` : "",
+      patronId: row.Patron_ID || "",
+      patronUsername: patron?.username || "",
+      patronDiscordId: patron?.discordId || "",
       rowNumber: row.rowNumber
     };
   });
@@ -231,6 +293,9 @@ export async function listEntreprises() {
 export async function createEntreprise(payload) {
   const ca = Number(payload.chiffreAffaires || 0);
   const now = new Date().toISOString();
+  const patrons = await listPatronAccounts();
+  const patronId = String(payload.patronId || "").trim();
+  const patron = patrons.find((item) => item.id === patronId);
   const entreprise = {
     id: uid("ent"),
     nom: payload.nom,
@@ -238,7 +303,9 @@ export async function createEntreprise(payload) {
     chiffreAffaires: ca,
     taxesDues: calculateTaxes(ca),
     derniereMiseAJour: now,
-    discordId: String(payload.discordId || "").trim()
+    patronId,
+    patronUsername: patron?.username || "",
+    patronDiscordId: patron?.discordId || ""
   };
 
   await appendRow(ENTREPRISES_SHEET, [
@@ -248,7 +315,7 @@ export async function createEntreprise(payload) {
     entreprise.chiffreAffaires,
     entreprise.taxesDues,
     entreprise.derniereMiseAJour,
-    entreprise.discordId
+    entreprise.patronId
   ]);
 
   return entreprise;
@@ -260,6 +327,9 @@ export async function updateEntreprise(id, payload) {
   if (!existing) return null;
 
   const ca = Number(payload.chiffreAffaires ?? existing.chiffreAffaires);
+  const patrons = await listPatronAccounts();
+  const patronId = payload.patronId !== undefined ? String(payload.patronId || "").trim() : existing.patronId;
+  const patron = patrons.find((item) => item.id === patronId);
   const updated = {
     ...existing,
     nom: payload.nom ?? existing.nom,
@@ -267,7 +337,9 @@ export async function updateEntreprise(id, payload) {
     chiffreAffaires: ca,
     taxesDues: calculateTaxes(ca),
     derniereMiseAJour: new Date().toISOString(),
-    discordId: payload.discordId !== undefined ? String(payload.discordId || "").trim() : existing.discordId
+    patronId,
+    patronUsername: patron?.username || "",
+    patronDiscordId: patron?.discordId || ""
   };
 
   await updateRow(ENTREPRISES_SHEET, existing.rowNumber, [
@@ -277,7 +349,7 @@ export async function updateEntreprise(id, payload) {
     updated.chiffreAffaires,
     updated.taxesDues,
     updated.derniereMiseAJour,
-    updated.discordId
+    updated.patronId
   ]);
 
   delete updated.rowNumber;
@@ -301,7 +373,7 @@ export async function recalculateEntrepriseTaxes() {
         chiffreAffaires,
         expectedTaxes,
         row.Derniere_Mise_A_Jour,
-        row.Discord_ID || ""
+        row.Patron_ID || ""
       ]);
       updatedCount += 1;
     }
@@ -365,30 +437,29 @@ export async function removeStaff(id) {
   return true;
 }
 
-export async function listPatrons() {
+async function listPatronAccounts() {
   const rows = await readSheet(PATRONS_SHEET, patronHeaders);
-  const entreprises = await listEntreprises();
-
-  return rows.map((row) => {
-    const entreprise = entreprises.find((item) => item.id === row.Entreprise_ID);
-    return {
-      id: row.ID,
-      username: row.Username,
-      passwordHash: row.Password_Hash,
-      entrepriseId: row.Entreprise_ID,
-      entrepriseNom: entreprise?.nom || "",
-      role: row.Role || "patron",
-      rowNumber: row.rowNumber
-    };
-  });
+  return rows.map((row) => ({
+    id: row.ID,
+    username: row.Username,
+    passwordHash: row.Password_Hash,
+    discordId: row.Discord_ID || "",
+    discordUrl: row.Discord_ID ? `https://discord.com/users/${row.Discord_ID}` : "",
+    role: row.Role || "patron",
+    rowNumber: row.rowNumber
+  }));
 }
 
-export async function createPatron({ username, passwordHash, entrepriseId }) {
+export async function listPatrons() {
+  return listPatronAccounts();
+}
+
+export async function createPatron({ username, passwordHash, discordId = "" }) {
   const patron = {
     id: uid("patron"),
     username,
     passwordHash,
-    entrepriseId,
+    discordId: String(discordId || "").trim(),
     role: "patron"
   };
 
@@ -396,14 +467,14 @@ export async function createPatron({ username, passwordHash, entrepriseId }) {
     patron.id,
     patron.username,
     patron.passwordHash,
-    patron.entrepriseId,
+    patron.discordId,
     patron.role
   ]);
 
   return {
     id: patron.id,
     username: patron.username,
-    entrepriseId: patron.entrepriseId,
+    discordId: patron.discordId,
     role: patron.role
   };
 }
@@ -417,7 +488,7 @@ export async function updatePatron(id, payload) {
     ...existing,
     username: payload.username ?? existing.username,
     passwordHash: payload.passwordHash ?? existing.passwordHash,
-    entrepriseId: payload.entrepriseId ?? existing.entrepriseId,
+    discordId: payload.discordId !== undefined ? String(payload.discordId || "").trim() : existing.discordId,
     role: "patron"
   };
 
@@ -425,15 +496,15 @@ export async function updatePatron(id, payload) {
     updated.id,
     updated.username,
     updated.passwordHash,
-    updated.entrepriseId,
+    updated.discordId,
     updated.role
   ]);
 
   return {
     id: updated.id,
     username: updated.username,
-    entrepriseId: updated.entrepriseId,
-    entrepriseNom: updated.entrepriseNom,
+    discordId: updated.discordId,
+    discordUrl: updated.discordId ? `https://discord.com/users/${updated.discordId}` : "",
     role: updated.role
   };
 }
