@@ -191,7 +191,8 @@ export async function getCaLockSettings() {
   await ensureSheetsReady();
   const rows = await readSheet(SETTINGS_SHEET, settingsHeaders);
   const setting = rows.find((row) => row.Key === CA_MANUAL_LOCK_KEY);
-  return { manualLocked: setting?.Value === "true" };
+  const value = String(setting?.Value || "").trim().toLowerCase();
+  return { manualLocked: value === "true" };
 }
 
 export async function setCaManualLock(manualLocked) {

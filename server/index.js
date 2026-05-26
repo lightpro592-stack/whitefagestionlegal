@@ -217,7 +217,7 @@ app.put("/api/ca-lock", requireAuth, requireAdmin, requireAdminSheets, async (re
 app.get("/api/entreprises", requireAuth, async (req, res, next) => {
   try {
     const entreprises = await listEntreprises();
-    const caLock = req.user.role === "admin" ? await getCaLockStatus() : { locked: false, manualLocked: false, automaticLocked: false };
+    const caLock = await getCaLockStatus();
     if (req.user.role === "patron") {
       return res.json({
         entreprises: entreprises.filter((item) => item.id === req.user.entrepriseId),
