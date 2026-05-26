@@ -263,13 +263,17 @@ function EntreprisesView({ api, user, onMessage }) {
 
   async function create(event) {
     event.preventDefault();
-    const data = await api.request("/api/entreprises", {
-      method: "POST",
-      body: JSON.stringify(form)
-    });
-    setEntreprises((items) => [...items, data.entreprise]);
-    setForm({ nom: "", patronId: patrons[0]?.id || "", chiffreAffaires: "" });
-    onMessage("Entreprise créée avec taxes calculées automatiquement.");
+    try {
+      const data = await api.request("/api/entreprises", {
+        method: "POST",
+        body: JSON.stringify(form)
+      });
+      setEntreprises((items) => [...items, data.entreprise]);
+      setForm({ nom: "", patronId: patrons[0]?.id || "", chiffreAffaires: "" });
+      onMessage("Entreprise creee avec taxes calculees automatiquement.");
+    } catch (err) {
+      onMessage(err.message);
+    }
   }
 
   async function saveCA(item) {
