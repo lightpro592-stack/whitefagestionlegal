@@ -26,7 +26,7 @@ import {
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
-const jwtSecret = process.env.JWT_SECRET || "whitefa-dev-secret-change-me";
+const jwtSecret = process.env.JWT_SECRET || "mysteria-fa-dev-secret-change-me";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distPath = path.resolve(__dirname, "../dist");
 
@@ -147,7 +147,7 @@ async function validatePatronAssignment(patronId) {
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "WhiteFA Gestion" });
+  res.json({ ok: true, service: "Mysteria FA" });
 });
 
 app.post("/api/setup", requireAuth, requireAdmin, async (_req, res, next) => {
@@ -164,7 +164,7 @@ app.post("/api/auth/login", async (req, res, next) => {
     const username = String(req.body.username || "").trim();
     const password = String(req.body.password || "");
 
-    if (username === "admin" && password === "whitefagestion") {
+    if (username === "admin" && password === "mysteria-fa") {
       const user = { id: "master-admin", username: "admin", role: "admin" };
       await ensureSheetsForAdmin();
       return res.json({ token: signToken(user), user });
@@ -470,7 +470,7 @@ const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURL
 
 if (isDirectRun) {
   app.listen(port, () => {
-    console.log(`WhiteFA Gestion API lancée sur http://127.0.0.1:${port}`);
+    console.log(`Mysteria FA API lancée sur http://127.0.0.1:${port}`);
     ensureSheetsReady().catch((error) => {
       console.error("Initialisation Google Sheets impossible:", error.message);
     });

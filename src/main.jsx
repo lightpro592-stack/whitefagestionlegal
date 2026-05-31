@@ -26,7 +26,7 @@ const currency = new Intl.NumberFormat("fr-FR", {
 
 function getStoredSession() {
   try {
-    return JSON.parse(localStorage.getItem("whitefa-session")) || {};
+    return JSON.parse(localStorage.getItem("mysteria-fa-session")) || {};
   } catch {
     return {};
   }
@@ -54,7 +54,7 @@ function App() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status === 401) {
-          localStorage.removeItem("whitefa-session");
+          localStorage.removeItem("mysteria-fa-session");
           setToken("");
           setUser(null);
         }
@@ -76,13 +76,13 @@ function App() {
   function saveSession(nextToken, nextUser) {
     setToken(nextToken);
     setUser(nextUser);
-    localStorage.setItem("whitefa-session", JSON.stringify({ token: nextToken, user: nextUser }));
+    localStorage.setItem("mysteria-fa-session", JSON.stringify({ token: nextToken, user: nextUser }));
   }
 
   function logout() {
     setToken("");
     setUser(null);
-    localStorage.removeItem("whitefa-session");
+    localStorage.removeItem("mysteria-fa-session");
   }
 
   if (!user || !token) {
@@ -99,7 +99,7 @@ function App() {
               <Shield className="h-6 w-6 text-neon" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-normal">WhiteFA Gestion</h1>
+              <h1 className="text-xl font-bold tracking-normal">Mysteria FA</h1>
               <p className="text-sm text-slate-400">
                 Connecté en <span className="text-neon">{user.username}</span> · {user.role}
               </p>
@@ -188,7 +188,7 @@ function LoginScreen({ api, onLogin }) {
             <Shield className="h-7 w-7 text-neon" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-normal">WhiteFA Gestion</h1>
+            <h1 className="text-2xl font-bold tracking-normal">Mysteria FA</h1>
             <p className="text-sm text-slate-400">Accès entreprises et staff</p>
           </div>
         </div>
