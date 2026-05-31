@@ -6,12 +6,14 @@ import jwt from "jsonwebtoken";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  appendLog,
   createEntreprise,
   createPatron,
   createStaff,
   ensureSheetsReady,
   getCaLockSettings,
   listEntreprises,
+  listLogs,
   listPatrons,
   listStaff,
   recalculateEntrepriseTaxes,
@@ -33,6 +35,19 @@ const distPath = path.resolve(__dirname, "../dist");
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.static(distPath));
+
+function logActor(user) {
+  return user ? `${user.username} (${user.role})` : "system";
+}
+
+async function logAction(user, categorie, action, details = "") {
+  await appendLog({
+    categorie,
+    utilisateur: logActor(user),
+    action,
+    details
+  });
+}
 
 function signToken(user) {
   return jwt.sign(user, jwtSecret, { expiresIn: "12h" });
@@ -199,6 +214,14 @@ app.get("/api/auth/me", requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
+app.get("/api/logs", requireAuth, requireAdmin, requireAdminSheets, async (_req, res, next) => {
+  try {
+    res.json({ logs: await listLogs() });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/ca-lock", requireAuth, requireAdminSheets, async (_req, res, next) => {
   try {
     res.json(await getCaLockStatus());
@@ -211,6 +234,7 @@ app.put("/api/ca-lock", requireAuth, requireAdmin, requireAdminSheets, async (re
   try {
     const manualLocked = Boolean(req.body.locked);
     await setCaManualLock(manualLocked);
+    await logAction(req.user, "ca", manualLocked ? "Blocage CA active" : "Blocage CA desactive");
     res.json(await getCaLockStatus());
   } catch (error) {
     next(error);
@@ -240,6 +264,7 @@ app.post("/api/entreprises", requireAuth, requireEnterpriseManager, async (req, 
     const patronMessage = await validatePatronAssignment(String(req.body.patronId || "").trim());
     if (patronMessage) return res.status(400).json({ message: patronMessage });
     const entreprise = await createEntreprise(req.body);
+    await logAction(req.user, "entreprises", "Creation entreprise", `Entreprise: ${entreprise.nom}`);
     res.status(201).json({ entreprise });
   } catch (error) {
     next(error);
@@ -278,15 +303,23 @@ app.put("/api/entreprises/:id", requireAuth, async (req, res, next) => {
 
     const entreprise = await updateEntreprise(req.params.id, req.body);
     if (!entreprise) return res.status(404).json({ message: "Entreprise introuvable." });
+    if (req.body.chiffreAffaires !== undefined) {
+      await logAction(req.user, "ca", "Modification CA", `Entreprise: ${entreprise.nom} | CA: ${entreprise.chiffreAffaires}`);
+    }
+    if (req.body.nom !== undefined || req.body.patronId !== undefined) {
+      await logAction(req.user, "entreprises", "Modification entreprise", `Entreprise: ${entreprise.nom}`);
+    }
     res.json({ entreprise });
   } catch (error) {
     next(error);
   }
 });
 
-app.post("/api/entreprises/recalculate-taxes", requireAuth, requireEnterpriseManager, async (_req, res, next) => {
+app.post("/api/entreprises/recalculate-taxes", requireAuth, requireEnterpriseManager, async (req, res, next) => {
   try {
-    res.json(await recalculateEntrepriseTaxes());
+    const result = await recalculateEntrepriseTaxes();
+    await logAction(req.user, "ca", "Recalcul des taxes", `Lignes mises a jour: ${result.updatedCount}`);
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -294,8 +327,11 @@ app.post("/api/entreprises/recalculate-taxes", requireAuth, requireEnterpriseMan
 
 app.delete("/api/entreprises/:id", requireAuth, requireEnterpriseManager, async (req, res, next) => {
   try {
+    const entreprises = await listEntreprises();
+    const entreprise = entreprises.find((item) => item.id === req.params.id);
     const removed = await removeEntreprise(req.params.id);
     if (!removed) return res.status(404).json({ message: "Entreprise introuvable." });
+    await logAction(req.user, "entreprises", "Suppression entreprise", `Entreprise: ${entreprise?.nom || req.params.id}`);
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -348,6 +384,7 @@ app.post("/api/patrons", requireAuth, requireAdmin, async (req, res, next) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const account = await createPatron({ username, passwordHash, discordId });
+    await logAction(req.user, "patrons", "Creation patron", `Patron: ${account.username}`);
     res.status(201).json({ account });
   } catch (error) {
     next(error);
@@ -377,6 +414,7 @@ app.put("/api/patrons/:id", requireAuth, requireAdmin, async (req, res, next) =>
 
     const account = await updatePatron(req.params.id, payload);
     if (!account) return res.status(404).json({ message: "Compte patron introuvable." });
+    await logAction(req.user, "patrons", "Modification patron", `Patron: ${account.username}`);
     res.json({ account });
   } catch (error) {
     next(error);
@@ -385,8 +423,11 @@ app.put("/api/patrons/:id", requireAuth, requireAdmin, async (req, res, next) =>
 
 app.delete("/api/patrons/:id", requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    const patrons = await listPatrons();
+    const patron = patrons.find((item) => item.id === req.params.id);
     const removed = await removePatron(req.params.id);
     if (!removed) return res.status(404).json({ message: "Compte patron introuvable." });
+    await logAction(req.user, "patrons", "Suppression patron", `Patron: ${patron?.username || req.params.id}`);
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -416,6 +457,7 @@ app.post("/api/staff", requireAuth, requireAdmin, async (req, res, next) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const account = await createStaff({ username, passwordHash, role });
+    await logAction(req.user, "staff", "Creation login staff", `Staff: ${account.username} | Role: ${account.role}`);
     res.status(201).json({ account });
   } catch (error) {
     next(error);
@@ -435,6 +477,7 @@ app.put("/api/staff/:id", requireAuth, requireAdmin, async (req, res, next) => {
 
     const account = await updateStaff(req.params.id, payload);
     if (!account) return res.status(404).json({ message: "Compte staff introuvable." });
+    await logAction(req.user, "staff", "Modification login staff", `Staff: ${account.username} | Role: ${account.role}`);
     res.json({ account });
   } catch (error) {
     next(error);
@@ -443,8 +486,11 @@ app.put("/api/staff/:id", requireAuth, requireAdmin, async (req, res, next) => {
 
 app.delete("/api/staff/:id", requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    const staff = await listStaff();
+    const account = staff.find((item) => item.id === req.params.id);
     const removed = await removeStaff(req.params.id);
     if (!removed) return res.status(404).json({ message: "Compte staff introuvable." });
+    await logAction(req.user, "staff", "Suppression login staff", `Staff: ${account?.username || req.params.id}`);
     res.status(204).end();
   } catch (error) {
     next(error);

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Building2,
+  ClipboardList,
   CircleDollarSign,
   ExternalLink,
   Lock,
@@ -130,6 +131,13 @@ function App() {
                   <Users className="h-4 w-4" />
                   Staff
                 </button>
+                <button
+                  className={`nav-button ${view === "logs" ? "nav-button-active" : ""}`}
+                  onClick={() => setView("logs")}
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  Logs
+                </button>
               </>
             )}
             <button className="icon-button" onClick={logout} title="Déconnexion" aria-label="Déconnexion">
@@ -153,6 +161,9 @@ function App() {
         )}
         {view === "staff" && user.role === "admin" && (
           <StaffView api={api} onMessage={setMessage} />
+        )}
+        {view === "logs" && user.role === "admin" && (
+          <LogsView api={api} onMessage={setMessage} />
         )}
       </main>
     </div>
@@ -645,6 +656,82 @@ function PatronsView({ api, onMessage }) {
                       </button>
                     </div>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+function LogsView({ api, onMessage }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const categories = {
+    ca: "CA",
+    entreprises: "Entreprises",
+    patrons: "Patrons",
+    staff: "Staff"
+  };
+
+  async function load() {
+    setLoading(true);
+    try {
+      const data = await api.request("/api/logs");
+      setLogs(data.logs || []);
+    } catch (err) {
+      onMessage(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  return (
+    <section className="space-y-6">
+      <div className="surface-panel flex flex-wrap items-center justify-between gap-3 p-5">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Logs</h2>
+          <p className="text-sm text-slate-400">Historique des modifications du site.</p>
+        </div>
+        <button className="nav-button" onClick={load} disabled={loading}>
+          <ClipboardList className="h-4 w-4" />
+          Actualiser
+        </button>
+      </div>
+
+      <div className="table-shell">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[940px] text-left">
+            <thead className="border-b border-line/80 text-xs uppercase text-slate-400">
+              <tr>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Categorie</th>
+                <th className="px-4 py-3">Utilisateur</th>
+                <th className="px-4 py-3">Action</th>
+                <th className="px-4 py-3">Details</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line/80">
+              {loading && <TableMessage colSpan={5} text="Chargement des logs..." />}
+              {!loading && logs.length === 0 && <TableMessage colSpan={5} text="Aucun log pour le moment." />}
+              {logs.map((log) => (
+                <tr key={log.id}>
+                  <td className="px-4 py-3 text-sm text-slate-300">{formatDate(log.date)}</td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-md border border-neon/30 bg-neon/10 px-2 py-1 text-xs font-semibold text-neon">
+                      {categories[log.categorie] || log.categorie}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-white">{log.utilisateur || "-"}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-white">{log.action}</td>
+                  <td className="px-4 py-3 text-sm text-slate-400">{log.details || "-"}</td>
                 </tr>
               ))}
             </tbody>

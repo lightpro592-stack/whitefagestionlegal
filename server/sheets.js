@@ -4,6 +4,7 @@ const ENTREPRISES_SHEET = "Entreprises";
 const STAFF_SHEET = "Staff";
 const PATRONS_SHEET = "Patrons";
 const SETTINGS_SHEET = "Settings";
+const LOGS_SHEET = "Logs";
 
 const entrepriseHeaders = [
   "ID",
@@ -18,6 +19,7 @@ const entrepriseHeaders = [
 const staffHeaders = ["ID", "Username", "Password_Hash", "Role"];
 const patronHeaders = ["ID", "Username", "Password_Hash", "Discord_ID", "Role"];
 const settingsHeaders = ["Key", "Value"];
+const logHeaders = ["ID", "Date", "Categorie", "Utilisateur", "Action", "Details"];
 const CA_MANUAL_LOCK_KEY = "ca_manual_lock";
 
 function normalizePrivateKey(value) {
@@ -208,6 +210,9 @@ async function googleEnsureSheetsReady() {
   if (!titles.includes(SETTINGS_SHEET)) {
     requests.push({ addSheet: { properties: { title: SETTINGS_SHEET } } });
   }
+  if (!titles.includes(LOGS_SHEET)) {
+    requests.push({ addSheet: { properties: { title: LOGS_SHEET } } });
+  }
 
   if (requests.length > 0) {
     await sheets.spreadsheets.batchUpdate({
@@ -242,6 +247,12 @@ async function googleEnsureSheetsReady() {
       range: `${SETTINGS_SHEET}!A1:B1`,
       valueInputOption: "RAW",
       requestBody: { values: [settingsHeaders] }
+    }),
+    sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEET_ID,
+      range: `${LOGS_SHEET}!A1:F1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [logHeaders] }
     })
   ]);
 }
@@ -531,6 +542,7 @@ function getMemoryStore() {
       entreprises: [],
       staff: [],
       patrons: [],
+      logs: [],
       manualLocked: false
     };
   }
@@ -671,6 +683,48 @@ async function memoryRemovePatron(id) {
   return store.patrons.length !== before;
 }
 
+async function googleListLogs() {
+  const rows = await readSheet(LOGS_SHEET, logHeaders);
+  return rows.reverse().map((row) => ({
+    id: row.ID,
+    date: row.Date,
+    categorie: row.Categorie,
+    utilisateur: row.Utilisateur,
+    action: row.Action,
+    details: row.Details
+  }));
+}
+
+async function googleAppendLog({ categorie, utilisateur, action, details = "" }) {
+  const log = {
+    id: uid("log"),
+    date: new Date().toISOString(),
+    categorie,
+    utilisateur,
+    action,
+    details: typeof details === "string" ? details : JSON.stringify(details)
+  };
+  await appendRow(LOGS_SHEET, [log.id, log.date, log.categorie, log.utilisateur, log.action, log.details]);
+  return log;
+}
+
+async function memoryListLogs() {
+  return [...getMemoryStore().logs].reverse();
+}
+
+async function memoryAppendLog({ categorie, utilisateur, action, details = "" }) {
+  const log = {
+    id: uid("log"),
+    date: new Date().toISOString(),
+    categorie,
+    utilisateur,
+    action,
+    details: typeof details === "string" ? details : JSON.stringify(details)
+  };
+  getMemoryStore().logs.push(log);
+  return log;
+}
+
 const choose = (googleFn, memoryFn) => (...args) => hasGoogleConfig() ? googleFn(...args) : memoryFn(...args);
 
 export const ensureSheetsReady = choose(googleEnsureSheetsReady, memoryEnsureSheetsReady);
@@ -689,3 +743,6 @@ export const listPatrons = choose(googleListPatrons, memoryListPatrons);
 export const createPatron = choose(googleCreatePatron, memoryCreatePatron);
 export const updatePatron = choose(googleUpdatePatron, memoryUpdatePatron);
 export const removePatron = choose(googleRemovePatron, memoryRemovePatron);
+
+export const listLogs = choose(googleListLogs, memoryListLogs);
+export const appendLog = choose(googleAppendLog, memoryAppendLog);
