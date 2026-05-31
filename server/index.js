@@ -67,10 +67,6 @@ function requireEnterpriseManager(req, res, next) {
 }
 
 async function ensureSheetsForAdmin() {
-  if (!process.env.GOOGLE_SHEET_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
-    throw new Error("Configuration Google Sheets manquante. Verifie les variables d'environnement.");
-  }
-
   await ensureSheetsReady();
 }
 

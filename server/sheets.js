@@ -188,7 +188,7 @@ async function migrateLegacyPatronAssignments(sheets) {
   }
 }
 
-export async function ensureSheetsReady() {
+async function googleEnsureSheetsReady() {
   const sheets = getSheetsClient();
   const spreadsheet = await sheets.spreadsheets.get({
     spreadsheetId: process.env.GOOGLE_SHEET_ID
@@ -246,7 +246,7 @@ export async function ensureSheetsReady() {
   ]);
 }
 
-export async function getCaLockSettings() {
+async function googleGetCaLockSettings() {
   await ensureSheetsReady();
   const rows = await readSheet(SETTINGS_SHEET, settingsHeaders);
   const setting = rows.find((row) => row.Key === CA_MANUAL_LOCK_KEY);
@@ -254,7 +254,7 @@ export async function getCaLockSettings() {
   return { manualLocked: value === "true" };
 }
 
-export async function setCaManualLock(manualLocked) {
+async function googleSetCaManualLock(manualLocked) {
   await ensureSheetsReady();
   const rows = await readSheet(SETTINGS_SHEET, settingsHeaders);
   const existing = rows.find((row) => row.Key === CA_MANUAL_LOCK_KEY);
@@ -269,7 +269,7 @@ export async function setCaManualLock(manualLocked) {
   return { manualLocked };
 }
 
-export async function listEntreprises() {
+async function googleListEntreprises() {
   const rows = await readSheet(ENTREPRISES_SHEET, entrepriseHeaders);
   const patrons = await listPatronAccounts();
   return rows.map((row) => {
@@ -290,7 +290,7 @@ export async function listEntreprises() {
   });
 }
 
-export async function createEntreprise(payload) {
+async function googleCreateEntreprise(payload) {
   const ca = Number(payload.chiffreAffaires || 0);
   const now = new Date().toISOString();
   const patrons = await listPatronAccounts();
@@ -321,7 +321,7 @@ export async function createEntreprise(payload) {
   return entreprise;
 }
 
-export async function updateEntreprise(id, payload) {
+async function googleUpdateEntreprise(id, payload) {
   const entreprises = await listEntreprises();
   const existing = entreprises.find((item) => item.id === id);
   if (!existing) return null;
@@ -356,7 +356,7 @@ export async function updateEntreprise(id, payload) {
   return updated;
 }
 
-export async function recalculateEntrepriseTaxes() {
+async function googleRecalculateEntrepriseTaxes() {
   const rows = await readSheet(ENTREPRISES_SHEET, entrepriseHeaders);
   let updatedCount = 0;
 
@@ -382,7 +382,7 @@ export async function recalculateEntrepriseTaxes() {
   return { updatedCount };
 }
 
-export async function removeEntreprise(id) {
+async function googleRemoveEntreprise(id) {
   const entreprises = await listEntreprises();
   const existing = entreprises.find((item) => item.id === id);
   if (!existing) return false;
@@ -390,7 +390,7 @@ export async function removeEntreprise(id) {
   return true;
 }
 
-export async function listStaff() {
+async function googleListStaff() {
   const rows = await readSheet(STAFF_SHEET, staffHeaders);
   return rows.map((row) => ({
     id: row.ID,
@@ -401,13 +401,13 @@ export async function listStaff() {
   }));
 }
 
-export async function createStaff({ username, passwordHash, role = "staff" }) {
+async function googleCreateStaff({ username, passwordHash, role = "staff" }) {
   const staff = { id: uid("staff"), username, passwordHash, role };
   await appendRow(STAFF_SHEET, [staff.id, staff.username, staff.passwordHash, staff.role]);
   return { id: staff.id, username: staff.username, role: staff.role };
 }
 
-export async function updateStaff(id, payload) {
+async function googleUpdateStaff(id, payload) {
   const staff = await listStaff();
   const existing = staff.find((item) => item.id === id);
   if (!existing) return null;
@@ -429,7 +429,7 @@ export async function updateStaff(id, payload) {
   return { id: updated.id, username: updated.username, role: updated.role };
 }
 
-export async function removeStaff(id) {
+async function googleRemoveStaff(id) {
   const staff = await listStaff();
   const existing = staff.find((item) => item.id === id);
   if (!existing) return false;
@@ -450,11 +450,11 @@ async function listPatronAccounts() {
   }));
 }
 
-export async function listPatrons() {
+async function googleListPatrons() {
   return listPatronAccounts();
 }
 
-export async function createPatron({ username, passwordHash, discordId = "" }) {
+async function googleCreatePatron({ username, passwordHash, discordId = "" }) {
   const patron = {
     id: uid("patron"),
     username,
@@ -479,7 +479,7 @@ export async function createPatron({ username, passwordHash, discordId = "" }) {
   };
 }
 
-export async function updatePatron(id, payload) {
+async function googleUpdatePatron(id, payload) {
   const patrons = await listPatrons();
   const existing = patrons.find((item) => item.id === id);
   if (!existing) return null;
@@ -509,10 +509,183 @@ export async function updatePatron(id, payload) {
   };
 }
 
-export async function removePatron(id) {
+async function googleRemovePatron(id) {
   const patrons = await listPatrons();
   const existing = patrons.find((item) => item.id === id);
   if (!existing) return false;
   await deleteRow(PATRONS_SHEET, existing.rowNumber);
   return true;
 }
+
+function hasGoogleConfig() {
+  return Boolean(
+    process.env.GOOGLE_SHEET_ID &&
+    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
+    process.env.GOOGLE_PRIVATE_KEY
+  );
+}
+
+function getMemoryStore() {
+  if (!globalThis.__mysteriaFaStore) {
+    globalThis.__mysteriaFaStore = {
+      entreprises: [],
+      staff: [],
+      patrons: [],
+      manualLocked: false
+    };
+  }
+  return globalThis.__mysteriaFaStore;
+}
+
+function stripPassword(account) {
+  const { passwordHash, rowNumber, ...safe } = account;
+  return safe;
+}
+
+function mapMemoryEntreprise(item) {
+  const store = getMemoryStore();
+  const patron = store.patrons.find((entry) => entry.id === item.patronId);
+  return {
+    ...item,
+    taxesDues: calculateTaxes(item.chiffreAffaires),
+    patronUsername: patron?.username || "",
+    patronDiscordId: patron?.discordId || ""
+  };
+}
+
+async function memoryEnsureSheetsReady() {
+  getMemoryStore();
+}
+
+async function memoryGetCaLockSettings() {
+  return { manualLocked: getMemoryStore().manualLocked };
+}
+
+async function memorySetCaManualLock(manualLocked) {
+  const store = getMemoryStore();
+  store.manualLocked = Boolean(manualLocked);
+  return { manualLocked: store.manualLocked };
+}
+
+async function memoryListEntreprises() {
+  return getMemoryStore().entreprises.map(mapMemoryEntreprise);
+}
+
+async function memoryCreateEntreprise(payload) {
+  const entreprise = {
+    id: uid("ent"),
+    nom: payload.nom,
+    proprietaire: "",
+    chiffreAffaires: Number(payload.chiffreAffaires || 0),
+    taxesDues: calculateTaxes(payload.chiffreAffaires),
+    derniereMiseAJour: new Date().toISOString(),
+    patronId: String(payload.patronId || "").trim()
+  };
+  getMemoryStore().entreprises.push(entreprise);
+  return mapMemoryEntreprise(entreprise);
+}
+
+async function memoryUpdateEntreprise(id, payload) {
+  const store = getMemoryStore();
+  const index = store.entreprises.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+  const current = store.entreprises[index];
+  const updated = {
+    ...current,
+    nom: payload.nom ?? current.nom,
+    chiffreAffaires: Number(payload.chiffreAffaires ?? current.chiffreAffaires),
+    derniereMiseAJour: new Date().toISOString(),
+    patronId: payload.patronId !== undefined ? String(payload.patronId || "").trim() : current.patronId
+  };
+  store.entreprises[index] = updated;
+  return mapMemoryEntreprise(updated);
+}
+
+async function memoryRecalculateEntrepriseTaxes() {
+  return { updatedCount: 0 };
+}
+
+async function memoryRemoveEntreprise(id) {
+  const store = getMemoryStore();
+  const before = store.entreprises.length;
+  store.entreprises = store.entreprises.filter((item) => item.id !== id);
+  return store.entreprises.length !== before;
+}
+
+async function memoryListStaff() {
+  return getMemoryStore().staff.map((item) => ({ ...item }));
+}
+
+async function memoryCreateStaff({ username, passwordHash, role = "staff" }) {
+  const staff = { id: uid("staff"), username, passwordHash, role };
+  getMemoryStore().staff.push(staff);
+  return stripPassword(staff);
+}
+
+async function memoryUpdateStaff(id, payload) {
+  const store = getMemoryStore();
+  const index = store.staff.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+  store.staff[index] = { ...store.staff[index], ...payload };
+  return stripPassword(store.staff[index]);
+}
+
+async function memoryRemoveStaff(id) {
+  const store = getMemoryStore();
+  const before = store.staff.length;
+  store.staff = store.staff.filter((item) => item.id !== id);
+  return store.staff.length !== before;
+}
+
+async function memoryListPatrons() {
+  return getMemoryStore().patrons.map((item) => ({
+    id: item.id,
+    username: item.username,
+    passwordHash: item.passwordHash,
+    discordId: item.discordId || "",
+    discordUrl: item.discordId ? "https://discord.com/users/" + item.discordId : "",
+    role: item.role || "patron"
+  }));
+}
+
+async function memoryCreatePatron({ username, passwordHash, discordId = "" }) {
+  const patron = { id: uid("patron"), username, passwordHash, discordId: String(discordId || "").trim(), role: "patron" };
+  getMemoryStore().patrons.push(patron);
+  return stripPassword(patron);
+}
+
+async function memoryUpdatePatron(id, payload) {
+  const store = getMemoryStore();
+  const index = store.patrons.findIndex((item) => item.id === id);
+  if (index === -1) return null;
+  store.patrons[index] = { ...store.patrons[index], ...payload, role: "patron" };
+  const safe = stripPassword(store.patrons[index]);
+  return { ...safe, discordUrl: safe.discordId ? "https://discord.com/users/" + safe.discordId : "" };
+}
+
+async function memoryRemovePatron(id) {
+  const store = getMemoryStore();
+  const before = store.patrons.length;
+  store.patrons = store.patrons.filter((item) => item.id !== id);
+  store.entreprises = store.entreprises.map((item) => item.patronId === id ? { ...item, patronId: "" } : item);
+  return store.patrons.length !== before;
+}
+
+const choose = (googleFn, memoryFn) => (...args) => hasGoogleConfig() ? googleFn(...args) : memoryFn(...args);
+
+export const ensureSheetsReady = choose(googleEnsureSheetsReady, memoryEnsureSheetsReady);
+export const getCaLockSettings = choose(googleGetCaLockSettings, memoryGetCaLockSettings);
+export const setCaManualLock = choose(googleSetCaManualLock, memorySetCaManualLock);
+export const listEntreprises = choose(googleListEntreprises, memoryListEntreprises);
+export const createEntreprise = choose(googleCreateEntreprise, memoryCreateEntreprise);
+export const updateEntreprise = choose(googleUpdateEntreprise, memoryUpdateEntreprise);
+export const recalculateEntrepriseTaxes = choose(googleRecalculateEntrepriseTaxes, memoryRecalculateEntrepriseTaxes);
+export const removeEntreprise = choose(googleRemoveEntreprise, memoryRemoveEntreprise);
+export const listStaff = choose(googleListStaff, memoryListStaff);
+export const createStaff = choose(googleCreateStaff, memoryCreateStaff);
+export const updateStaff = choose(googleUpdateStaff, memoryUpdateStaff);
+export const removeStaff = choose(googleRemoveStaff, memoryRemoveStaff);
+export const listPatrons = choose(googleListPatrons, memoryListPatrons);
+export const createPatron = choose(googleCreatePatron, memoryCreatePatron);
+export const updatePatron = choose(googleUpdatePatron, memoryUpdatePatron);
+export const removePatron = choose(googleRemovePatron, memoryRemovePatron);
