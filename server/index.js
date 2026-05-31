@@ -175,7 +175,8 @@ app.post("/api/auth/login", async (req, res, next) => {
     const username = String(req.body.username || "").trim();
     const password = String(req.body.password || "");
 
-    if (username === "admin" && password === "mysteria-fa") {
+    const adminPasswords = new Set(["mysteria-fa", "mysteriagestionlegal", "whitefagestion"]);
+    if (username.toLowerCase() === "admin" && adminPasswords.has(password)) {
       const user = { id: "master-admin", username: "admin", role: "admin" };
       await ensureSheetsForAdmin();
       return res.json({ token: signToken(user), user });
