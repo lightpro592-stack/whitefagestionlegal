@@ -90,12 +90,12 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-ink text-slate-100">
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(57,255,182,0.16),transparent_32%),linear-gradient(135deg,#06080d_0%,#0d1220_52%,#12101a_100%)]" />
-      <header className="border-b border-line/80 bg-ink/82 backdrop-blur">
+    <div className="min-h-screen overflow-x-hidden bg-ink text-slate-100 antialiased">
+      <div className="app-ambient" />
+      <header className="sticky top-0 z-40 border-b border-line/70 bg-ink/72 shadow-deep backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-md border border-neon/40 bg-neon/10 shadow-glow">
+            <div className="brand-tile h-11 w-11">
               <Shield className="h-6 w-6 text-neon" />
             </div>
             <div>
@@ -139,9 +139,9 @@ function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         {message && (
-          <div className="mb-4 rounded-md border border-neon/30 bg-neon/10 px-4 py-3 text-sm text-neon">
+          <div className="mb-5 rounded-md border border-neon/35 bg-neon/12 px-4 py-3 text-sm font-medium text-neon shadow-glow">
             {message}
           </div>
         )}
@@ -180,11 +180,11 @@ function LoginScreen({ api, onLogin }) {
   }
 
   return (
-    <div className="grid min-h-screen place-items-center bg-ink px-4 text-slate-100">
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_25%_15%,rgba(57,255,182,0.18),transparent_30%),linear-gradient(145deg,#06080d_0%,#111827_55%,#17111f_100%)]" />
-      <form onSubmit={submit} className="w-full max-w-md rounded-lg border border-line bg-panel/92 p-6 shadow-glow">
-        <div className="mb-7 flex items-center gap-3">
-          <div className="grid h-12 w-12 place-items-center rounded-md border border-neon/40 bg-neon/10">
+    <div className="grid min-h-screen place-items-center bg-ink px-4 py-10 text-slate-100 antialiased">
+      <div className="login-ambient" />
+      <form onSubmit={submit} className="login-card w-full max-w-md p-7">
+        <div className="mb-8 flex items-center gap-4">
+          <div className="brand-tile h-14 w-14">
             <Shield className="h-7 w-7 text-neon" />
           </div>
           <div>
@@ -348,7 +348,7 @@ function EntreprisesView({ api, user, onMessage }) {
       )}
 
       {canManage && (
-        <form onSubmit={create} className="rounded-lg border border-line bg-panel/88 p-4">
+        <form onSubmit={create} className="surface-panel p-5">
           <div className="mb-4 flex items-center gap-2">
             <Plus className="h-5 w-5 text-neon" />
             <h2 className="text-lg font-semibold">Créer une entreprise</h2>
@@ -370,10 +370,10 @@ function EntreprisesView({ api, user, onMessage }) {
         </form>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-line bg-panel/88">
+      <div className="table-shell">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left">
-            <thead className="border-b border-line bg-slate-950/40 text-xs uppercase text-slate-400">
+            <thead className="border-b border-line/80 text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-3">Nom</th>
                 <th className="px-4 py-3">Patron</th>
@@ -387,7 +387,7 @@ function EntreprisesView({ api, user, onMessage }) {
               {loading && <TableMessage colSpan={6} text="Chargement..." />}
               {!loading && entreprises.length === 0 && <TableMessage colSpan={6} text={isPatron ? "Aucune entreprise liée à ton compte." : "Aucune entreprise."} />}
               {entreprises.map((item) => (
-                <tr key={item.id} className="hover:bg-white/[0.03]">
+                <tr key={item.id}>
                   <td className="px-4 py-3 font-medium text-white">{item.nom}</td>
                   <td className="px-4 py-3">
                     <div className="flex min-w-56 items-center gap-2">
@@ -460,7 +460,7 @@ function EntreprisesView({ api, user, onMessage }) {
 
       {editEntreprise && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6">
-          <form onSubmit={saveEntrepriseEdit} className="w-full max-w-2xl rounded-lg border border-line bg-panel p-5 shadow-glow">
+          <form onSubmit={saveEntrepriseEdit} className="surface-panel w-full max-w-2xl p-5">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-white">Editer l'entreprise</h2>
@@ -564,7 +564,7 @@ function PatronsView({ api, onMessage }) {
     <section className="space-y-6">
       <CaLockControl api={api} onMessage={onMessage} />
 
-      <form onSubmit={create} className="rounded-lg border border-line bg-panel/88 p-4">
+      <form onSubmit={create} className="surface-panel p-5">
         <div className="mb-4 flex items-center gap-2">
           <UserRound className="h-5 w-5 text-neon" />
           <h2 className="text-lg font-semibold">Gestion Patrons</h2>
@@ -580,10 +580,10 @@ function PatronsView({ api, onMessage }) {
         </div>
       </form>
 
-      <div className="overflow-hidden rounded-lg border border-line bg-panel/88">
+      <div className="table-shell">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-left">
-            <thead className="border-b border-line bg-slate-950/40 text-xs uppercase text-slate-400">
+            <thead className="border-b border-line/80 text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-3">Username</th>
                 <th className="px-4 py-3">Nouveau mot de passe</th>
@@ -595,7 +595,7 @@ function PatronsView({ api, onMessage }) {
             <tbody className="divide-y divide-line/80">
               {patrons.length === 0 && <TableMessage colSpan={5} text="Aucun compte patron dans le Google Sheet." />}
               {patrons.map((item) => (
-                <tr key={item.id} className="hover:bg-white/[0.03]">
+                <tr key={item.id}>
                   <td className="px-4 py-3">
                     <input
                       className="field h-10"
@@ -699,7 +699,7 @@ function StaffView({ api, onMessage }) {
 
   return (
     <section className="space-y-6">
-      <form onSubmit={create} className="rounded-lg border border-line bg-panel/88 p-4">
+      <form onSubmit={create} className="surface-panel p-5">
         <div className="mb-4 flex items-center gap-2">
           <Users className="h-5 w-5 text-neon" />
           <h2 className="text-lg font-semibold">Gestion Staff</h2>
@@ -719,10 +719,10 @@ function StaffView({ api, onMessage }) {
         </div>
       </form>
 
-      <div className="overflow-hidden rounded-lg border border-line bg-panel/88">
+      <div className="table-shell">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left">
-            <thead className="border-b border-line bg-slate-950/40 text-xs uppercase text-slate-400">
+            <thead className="border-b border-line/80 text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-3">Username</th>
                 <th className="px-4 py-3">Nouveau mot de passe</th>
@@ -733,7 +733,7 @@ function StaffView({ api, onMessage }) {
             <tbody className="divide-y divide-line/80">
               {staff.length === 0 && <TableMessage colSpan={4} text="Aucun compte staff dans le Google Sheet." />}
               {staff.map((item) => (
-                <tr key={item.id} className="hover:bg-white/[0.03]">
+                <tr key={item.id}>
                   <td className="px-4 py-3">
                     <input
                       className="field h-10"
@@ -783,12 +783,12 @@ function StaffView({ api, onMessage }) {
 
 function Metric({ title, value, icon: Icon }) {
   return (
-    <div className="rounded-lg border border-line bg-panel/88 p-4">
-      <div className="mb-2 flex items-center justify-between text-slate-400">
+    <div className="surface-panel p-5">
+      <div className="mb-3 flex items-center justify-between text-slate-400">
         <span className="text-sm">{title}</span>
         <Icon className="h-5 w-5 text-neon" />
       </div>
-      <div className="text-2xl font-bold text-white">{value}</div>
+      <div className="text-2xl font-extrabold text-white">{value}</div>
     </div>
   );
 }
@@ -826,7 +826,7 @@ function CaLockControl({ api, onMessage }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-panel/88 p-4">
+    <div className="surface-panel flex flex-wrap items-center justify-between gap-3 p-5">
       <div>
         <h2 className="text-lg font-semibold text-white">Blocage CA patrons</h2>
         <p className="text-sm text-slate-400">
